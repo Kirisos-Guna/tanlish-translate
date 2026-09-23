@@ -21,8 +21,8 @@ data class HttpResult(val code: Int, val body: String)
  * ```
  *
  * It is an undocumented endpoint: it needs no key, is rate limited to roughly 15 requests an hour
- * per IP, and can change or disappear. Everything funnels through [RemoteTranslator], and a local
- * cache plus glossary cover the requests we cannot make.
+ * per IP, and can change or disappear. Everything funnels through [RemoteTranslator], and the local
+ * cache means a sentence is never paid for twice.
  */
 class EasyTamilTypingApi(
     private val baseUrl: String = DEFAULT_BASE_URL,

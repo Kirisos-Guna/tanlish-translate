@@ -1,6 +1,6 @@
 package com.example.tanlishkeyboard.data
 
-import com.example.tanlishkeyboard.engine.TanglishGlossary
+import com.example.tanlishkeyboard.engine.normaliseSentence
 import java.io.File
 
 /**
@@ -51,7 +51,7 @@ class TranslationCache(
         persist()
     }
 
-    private fun key(sentence: String): String = TanglishGlossary.normalise(sentence)
+    private fun key(sentence: String): String = normaliseSentence(sentence)
 
     private fun trim() {
         if (entries.size <= maxEntries) return

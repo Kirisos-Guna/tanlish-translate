@@ -61,8 +61,8 @@ sealed interface ButtonOutcome {
  * What happens when the button is tapped: read the focused field, translate it, put the English
  * back, and keep the original around until the user undoes it.
  *
- * Translation itself lives in [Translator], so the button gets the same cache, glossary and hourly
- * budget handling the keyboard had.
+ * Translation itself lives in [Translator], so the button gets the same cache and hourly budget
+ * handling, and nothing is written unless the translation actually arrived.
  */
 class ButtonTranslator(
     private val fields: FieldProvider,
@@ -109,15 +109,8 @@ class ButtonTranslator(
             is TranslationOutcome.Translated ->
                 write(field, raw, outcome.text, outcome.source, outcome.note)
 
-            is TranslationOutcome.Unavailable -> {
-                val gloss = outcome.offlineFallback
-                if (gloss.isNullOrBlank()) {
-                    ButtonOutcome.Blocked(BlockReason.Failed, outcome.reason)
-                } else {
-                    // Better an honest word-by-word gloss than nothing; undo is right there.
-                    write(field, raw, gloss, TranslationSource.Local, outcome.reason)
-                }
-            }
+            // No offline fallback: the field keeps its Tanglish and the button says why.
+            is TranslationOutcome.Unavailable -> ButtonOutcome.Blocked(BlockReason.Failed, outcome.reason)
 
             TranslationOutcome.Blank ->
                 ButtonOutcome.Blocked(BlockReason.EmptyField, "Nothing typed there yet")
@@ -154,14 +147,7 @@ class ButtonTranslator(
 
         return when (val outcome = translator.translateSentence(raw)) {
             is TranslationOutcome.Translated -> copy(outcome.text, outcome.source, outcome.note)
-            is TranslationOutcome.Unavailable -> {
-                val gloss = outcome.offlineFallback
-                if (gloss.isNullOrBlank()) {
-                    ButtonOutcome.Blocked(BlockReason.Failed, outcome.reason)
-                } else {
-                    copy(gloss, TranslationSource.Local, outcome.reason)
-                }
-            }
+            is TranslationOutcome.Unavailable -> ButtonOutcome.Blocked(BlockReason.Failed, outcome.reason)
 
             TranslationOutcome.Blank -> ButtonOutcome.Blocked(BlockReason.EmptyField, "Nothing to translate")
         }
@@ -175,6 +161,5 @@ class ButtonTranslator(
     private fun describe(source: TranslationSource, note: String?): String = when (source) {
         TranslationSource.Ai -> note ?: "Translated with AI"
         TranslationSource.Cache -> "Reused a saved translation"
-        TranslationSource.Local -> if (note.isNullOrBlank()) "Offline words" else "Offline words — $note"
     }
 }

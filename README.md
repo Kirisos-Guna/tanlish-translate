@@ -15,11 +15,16 @@ button and the sentence in that field becomes *Hello friend, how are you?*
 
 - **Any app** — WhatsApp, Messages, Gmail, Chrome. Anything with a text field.
 - **One tap for the whole sentence**, not a keyboard to learn and not a word-by-word popup.
-- **Works offline first** — a bundled glossary of ~330 Tanglish phrases and a Tanglish→Tamil rule
-  engine answer instantly and free. The AI is only asked when you tap the button.
+- **Each sentence is only ever translated once** — the result is saved on the device, so a phrase you
+  use again costs nothing and works with no connection at all.
+- **Adjustable opacity** — a slider in the app sets how see-through the circle is over your apps.
 - **Undo** — a six-second chip puts your Tanglish back.
 
 The button only appears while the keyboard is up. Drag it anywhere; long press hides it.
+
+The translation itself is done by AI at `easytamiltyping.com`, so a phrase that has never been
+translated before needs an internet connection. There is no offline dictionary: when a request cannot
+be made, the button says so and leaves your text exactly as you typed it.
 
 ## Install
 
@@ -46,7 +51,7 @@ clears its cached translations, quota counter and settings.
 |---|---|
 | Reads | Only the focused text field, only when you tap the button. Nothing is read while you type, and password fields are skipped entirely. |
 | Sends | That field's text goes to `easytamiltyping.com` for translation, once per tap, only if you have allowed AI translation. Results are cached on the device, so repeating a phrase costs nothing. |
-| Free tier | That public endpoint allows roughly **15 requests an hour**. When the budget is spent the button falls back to the offline glossary and tells you it did. |
+| Free tier | That public endpoint allows roughly **15 requests an hour**. When the budget is spent the button tells you how long until it resets and leaves your text untouched. |
 | Fails safely | Apps that refuse programmatic edits get the translation on the clipboard instead of having their field rewritten. |
 
 ## Building
@@ -54,7 +59,7 @@ clears its cached translations, quota counter and settings.
 Needs JDK 21 and Android SDK 37 (`compileSdk 37`, `minSdk 24`).
 
 ```bash
-./gradlew :app:testDebugUnitTest   # 78 unit tests
+./gradlew :app:testDebugUnitTest   # unit tests (no network, no device)
 ./gradlew :app:assembleDebug       # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:assembleRelease     # signed only if keystore.properties is present
 ```
@@ -69,21 +74,13 @@ installed as an update, only as a fresh install.
 
 ### Icons
 
-Every icon in the app comes from a single source — the outline of **த** read out of a Tamil font — so
-the launcher icon, its themed (monochrome) layer, the in-app badge and the floating button can never
-drift apart:
+One mark, **த**, drawn as vectors: `drawable/ic_launcher_foreground.xml` for the adaptive icon,
+`ic_launcher_monochrome.xml` for Android 13+ themed icons, `ic_app_mark.xml` for the badge on the app's
+own screen and `ic_bubble_mark.xml` for the floating button. The WebP files under `mipmap-*` are the
+legacy pre-API-26 raster copies of the same tile, and are the one set that has to be redrawn by hand if
+the mark ever changes.
 
-```bash
-python tools/make_icons.py
-```
-
-That needs only Pillow. `fontTools` is not required: the script parses the TrueType `cmap`, `loca` and
-`glyf` tables itself and writes the adaptive icon, the monochrome layer, the button's mark, the legacy
-WebP rasters for API 24–25, and a proof sheet at `app/build/icon-proof/proof.html` that puts the
-extracted outline next to the font's own rendering — they agree on 99.1% of the ink, and the proof sheet
-is the check that keeps a bad parse from shipping.
-
-The mark is derived from Microsoft's Nirmala UI. That is fine for a personal build; a store release
+The shape is traced from Microsoft's Nirmala UI. That is fine for a personal build; a store release
 should redraw it as original artwork.
 
 ## Layout
@@ -93,8 +90,7 @@ should redraw it as original artwork.
 | `overlay/` | The floating button: its window, drag and snap, placement maths, boot restore |
 | `accessibility/` | Reading the focused field, rewriting it, and noticing when the keyboard is up |
 | `translate/` | The button's decision core: what to translate and when to fall back |
-| `engine/`, `net/`, `data/` | Glossary, Tamil transliteration, translation cache, quota bookkeeping, the endpoint client |
-| `tools/make_icons.py` | The icon generator |
+| `engine/`, `net/`, `data/` | Where a sentence gets translated, the endpoint client, the translation cache and quota bookkeeping |
 
 ## Notes
 

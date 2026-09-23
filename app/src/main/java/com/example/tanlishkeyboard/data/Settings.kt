@@ -3,8 +3,8 @@ package com.example.tanlishkeyboard.data
 /**
  * User facing switches and remembered window state.
  *
- * Networking is opt-in: nothing is sent anywhere until the user consents, because the button is
- * allowed to read text in other apps.
+ * [allowNetwork] is the only control over what leaves the phone: the button reads the field you are
+ * in, so the switch that stops it talking to the translation endpoint is deliberately explicit.
  */
 class Settings(private val store: KeyValueStore) {
 
@@ -13,10 +13,21 @@ class Settings(private val store: KeyValueStore) {
         get() = store.getString(KEY_ALLOW_NETWORK)?.toBooleanStrictOrNull() ?: true
         set(value) = store.putString(KEY_ALLOW_NETWORK, value.toString())
 
-    /** Set once the user has accepted that the text they translate is sent to easytamiltyping.com. */
-    var aiConsentGiven: Boolean
-        get() = store.getString(KEY_AI_CONSENT)?.toBooleanStrictOrNull() ?: false
-        set(value) = store.putString(KEY_AI_CONSENT, value.toString())
+    /**
+     * How opaque the floating button is drawn, 0.2 to 1.0.
+     *
+     * The default is what the button has always looked like: a dark circle you can see through just
+     * enough to read what is underneath it.
+     */
+    var bubbleOpacity: Float
+        get() = store.getString(KEY_BUBBLE_OPACITY)
+            ?.toFloatOrNull()
+            ?.coerceIn(MIN_BUBBLE_OPACITY, MAX_BUBBLE_OPACITY)
+            ?: DEFAULT_BUBBLE_OPACITY
+        set(value) = store.putString(
+            KEY_BUBBLE_OPACITY,
+            value.coerceIn(MIN_BUBBLE_OPACITY, MAX_BUBBLE_OPACITY).toString(),
+        )
 
     /** Whether the floating button should be on screen; it is what the service restores from. */
     var bubbleEnabled: Boolean
@@ -36,18 +47,25 @@ class Settings(private val store: KeyValueStore) {
      * When the accessibility service last connected, or 0 if never.
      *
      * Android's own "is my service enabled?" answer is unreliable across OEMs, so the service
-     * reports this itself, the same way the keyboard used to.
+     * reports this itself.
      */
     var accessibilitySeenAtMillis: Long
         get() = store.getString(KEY_ACCESSIBILITY_SEEN)?.toLongOrNull() ?: 0L
         set(value) = store.putString(KEY_ACCESSIBILITY_SEEN, value.toString())
 
-    private companion object {
-        const val KEY_ALLOW_NETWORK = "allow_network"
-        const val KEY_AI_CONSENT = "ai_consent_given"
-        const val KEY_BUBBLE_ENABLED = "bubble_enabled"
-        const val KEY_BUBBLE_X = "bubble_x"
-        const val KEY_BUBBLE_Y = "bubble_y"
-        const val KEY_ACCESSIBILITY_SEEN = "accessibility_seen_at"
+    companion object {
+        /** Never quite invisible, or the button could not be found again. */
+        const val MIN_BUBBLE_OPACITY = 0.2f
+        const val MAX_BUBBLE_OPACITY = 1f
+
+        /** The look the button shipped with: 0xC2 alpha. */
+        const val DEFAULT_BUBBLE_OPACITY = 0.76f
+
+        private const val KEY_ALLOW_NETWORK = "allow_network"
+        private const val KEY_BUBBLE_OPACITY = "bubble_opacity"
+        private const val KEY_BUBBLE_ENABLED = "bubble_enabled"
+        private const val KEY_BUBBLE_X = "bubble_x"
+        private const val KEY_BUBBLE_Y = "bubble_y"
+        private const val KEY_ACCESSIBILITY_SEEN = "accessibility_seen_at"
     }
 }

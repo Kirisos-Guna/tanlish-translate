@@ -7,8 +7,6 @@ import com.example.tanlishkeyboard.data.TranslationCache
 import com.example.tanlishkeyboard.engine.ApiResult
 import com.example.tanlishkeyboard.engine.MAX_SENTENCE_LENGTH
 import com.example.tanlishkeyboard.engine.RemoteTranslator
-import com.example.tanlishkeyboard.engine.TanglishGlossary
-import com.example.tanlishkeyboard.engine.TanglishToTamil
 import com.example.tanlishkeyboard.engine.TranslationSource
 import com.example.tanlishkeyboard.engine.Translator
 import kotlinx.coroutines.runBlocking
@@ -63,14 +61,6 @@ class ButtonTranslatorTest {
         }
     }
 
-    private val glossary = TanglishGlossary.parseText(
-        """
-        vanakkam	hello	வணக்கம்
-        nandri	thank you	நன்றி
-        nanba	friend	நண்பா
-        """.trimIndent(),
-    )
-
     private val store = MemoryKeyValueStore()
     private val quota = QuotaTracker(store)
     private val settings = Settings(store)
@@ -78,8 +68,6 @@ class ButtonTranslatorTest {
     private val now = 1_800_000_000L
 
     private fun translator(remote: RemoteTranslator) = Translator(
-        glossary = glossary,
-        tamilEngine = TanglishToTamil(),
         cache = cache,
         quota = quota,
         settings = settings,
@@ -97,14 +85,8 @@ class ButtonTranslatorTest {
         translator = translator(remote),
     ).let { it to clipboard }
 
-    private fun granted() {
-        settings.aiConsentGiven = true
-        settings.allowNetwork = true
-    }
-
     @Test
     fun `the focused field is replaced in place`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("Hello friend, how are you?", 12, now + 3600, false))
         val field = FakeField("vanakkam nanba epdi irukka")
         val (subject, clipboard) = button(remote, field)
@@ -121,7 +103,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `password fields are refused before anything is read`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("nope", null, null, false))
         val field = FakeField("hunter2", isPassword = true)
         val (subject, clipboard) = button(remote, field)
@@ -137,7 +118,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `apps that block the edit get the translation on the clipboard`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("Hello friend", 11, now + 3600, false))
         val field = FakeField("vanakkam nanba", acceptsEdits = false)
         val (subject, clipboard) = button(remote, field)
@@ -152,7 +132,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `an empty field is never sent anywhere`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("nope", null, null, false))
         val (subject, _) = button(remote, FakeField("   "))
 
@@ -164,7 +143,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `no field falls back to the clipboard`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("Hello friend", 10, now + 3600, false))
         val clipboard = FakeClipboard("vanakkam nanba")
         val (subject, _) = button(remote, field = null, clipboard = clipboard)
@@ -178,7 +156,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `with no field and nothing on the clipboard the user is told what to do`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("nope", null, null, false))
         val (subject, _) = button(remote, field = null)
 
@@ -191,7 +168,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `text longer than the endpoint allows is refused locally`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("nope", null, null, false))
         val (subject, _) = button(remote, FakeField("a".repeat(MAX_SENTENCE_LENGTH + 1)))
 
@@ -202,26 +178,38 @@ class ButtonTranslatorTest {
     }
 
     @Test
-    fun `an exhausted AI budget replaces the text with offline words`() = runBlocking {
-        granted()
+    fun `an exhausted AI budget blocks and says so, leaving the text alone`() = runBlocking {
         quota.update(0, now + 900)
         val remote = FakeRemote(ApiResult.Success("nope", null, null, false))
         val field = FakeField("nandri nanba")
         val (subject, _) = button(remote, field)
 
-        val outcome = subject.translate() as ButtonOutcome.Replaced
+        val outcome = subject.translate() as ButtonOutcome.Blocked
 
-        assertEquals("thank you friend", outcome.text)
-        assertEquals(TranslationSource.Local, outcome.source)
-        assertEquals("thank you friend", field.current)
-        assertTrue(outcome.message.contains("Offline words"))
-        assertTrue(outcome.message.contains("limit"))
+        assertEquals(BlockReason.Failed, outcome.reason)
+        assertTrue(outcome.message.contains("limit", ignoreCase = true))
+        assertEquals("the Tanglish stays put", "nandri nanba", field.current)
+        assertFalse(subject.canUndo)
         assertTrue(remote.calls.isEmpty())
     }
 
     @Test
-    fun `a failure with no words to offer blocks instead of writing nonsense`() = runBlocking {
-        granted()
+    fun `with the AI switched off the field keeps its text`() = runBlocking {
+        settings.allowNetwork = false
+        val remote = FakeRemote(ApiResult.Success("nope", null, null, false))
+        val field = FakeField("vanakkam nanba")
+        val (subject, _) = button(remote, field)
+
+        val outcome = subject.translate() as ButtonOutcome.Blocked
+
+        assertEquals(BlockReason.Failed, outcome.reason)
+        assertTrue(outcome.message.contains("switched off"))
+        assertEquals("vanakkam nanba", field.current)
+        assertTrue(remote.calls.isEmpty())
+    }
+
+    @Test
+    fun `a failure leaves the field alone and reports the reason`() = runBlocking {
         val remote = FakeRemote(ApiResult.Failed("Could not reach the translator"))
         val field = FakeField("zzz qqq")
         val (subject, _) = button(remote, field)
@@ -229,12 +217,12 @@ class ButtonTranslatorTest {
         val outcome = subject.translate() as ButtonOutcome.Blocked
 
         assertEquals(BlockReason.Failed, outcome.reason)
+        assertEquals("Could not reach the translator", outcome.message)
         assertEquals("zzz qqq", field.current)
     }
 
     @Test
     fun `undo puts the original text back once`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("Hello friend", 11, now + 3600, false))
         val field = FakeField("vanakkam nanba")
         val (subject, _) = button(remote, field)
@@ -250,7 +238,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `only the most recent tap can be undone`() = runBlocking {
-        granted()
         val remote = FakeRemote(ApiResult.Success("Hello friend", 9, now + 3600, false))
         val field = FakeField("vanakkam nanba")
         val (subject, _) = button(remote, field)
@@ -269,7 +256,6 @@ class ButtonTranslatorTest {
 
     @Test
     fun `a sentence that was translated before is reused from the cache`() = runBlocking {
-        granted()
         cache.put("vanakkam nanba", "Hello friend")
         val remote = FakeRemote(ApiResult.Failed("should not be called"))
         val field = FakeField("vanakkam nanba")

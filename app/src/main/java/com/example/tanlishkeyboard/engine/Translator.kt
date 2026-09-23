@@ -5,7 +5,7 @@ import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.data.TranslationCache
 
 /** Where a translation came from, so the UI can be honest about it. */
-enum class TranslationSource { Cache, Local, Ai }
+enum class TranslationSource { Cache, Ai }
 
 /** Result of a remote AI translation attempt. */
 sealed interface ApiResult {
@@ -36,8 +36,8 @@ sealed interface TranslationOutcome {
         val note: String? = null,
     ) : TranslationOutcome
 
-    /** AI could not be used; [offlineFallback] is a word-by-word gloss when one exists. */
-    data class Unavailable(val reason: String, val offlineFallback: String? = null) : TranslationOutcome
+    /** The AI could not be used. [reason] says why, and nothing gets written anywhere. */
+    data class Unavailable(val reason: String) : TranslationOutcome
 
     data object Blank : TranslationOutcome
 }
@@ -46,13 +46,13 @@ sealed interface TranslationOutcome {
 const val MAX_SENTENCE_LENGTH = 1000
 
 /**
- * Decides where a sentence gets translated: cache, bundled glossary, or the AI endpoint.
+ * Decides where a sentence gets translated: the cache, or the AI endpoint.
  *
- * Every caller goes through here, so swapping the backend for our own proxy is a one-class change.
+ * There is deliberately no offline fallback. A word-by-word gloss of a sentence the glossary only
+ * half knew was more misleading than helpful, so when a request cannot be made this says so
+ * plainly, and anything already translated stays free from the cache.
  */
 class Translator(
-    private val glossary: TanglishGlossary,
-    private val tamilEngine: TanglishToTamil,
     private val cache: TranslationCache,
     private val quota: QuotaTracker,
     private val settings: Settings,
@@ -60,35 +60,22 @@ class Translator(
     private val clock: () -> Long = { System.currentTimeMillis() / 1000L },
 ) {
 
-    /** Tamil script for a Tanglish word: glossary spelling first, phonetic rules otherwise. */
-    fun toTamil(tanglish: String): String =
-        glossary.tamilFor(tanglish) ?: tamilEngine.transliterate(tanglish)
-
     suspend fun translateSentence(sentence: String): TranslationOutcome {
-        val clean = TanglishGlossary.normalise(sentence)
+        val clean = normaliseSentence(sentence)
         if (clean.isEmpty()) return TranslationOutcome.Blank
 
         cache.get(clean)?.let { cached ->
             return TranslationOutcome.Translated(cached, TranslationSource.Cache, quota.effectiveRemaining(clock()))
         }
 
-        glossary.englishFor(clean)?.let { known ->
-            return TranslationOutcome.Translated(known, TranslationSource.Local, quota.effectiveRemaining(clock()))
-        }
-
-        val offline = glossary.glossWordByWord(clean)
-
         if (clean.length > MAX_SENTENCE_LENGTH) {
-            return TranslationOutcome.Unavailable("Too long for AI translation (max $MAX_SENTENCE_LENGTH characters)", offline)
+            return TranslationOutcome.Unavailable("Too long for AI translation (max $MAX_SENTENCE_LENGTH characters)")
         }
         if (!settings.allowNetwork) {
-            return TranslationOutcome.Unavailable("AI translation is turned off in the app", offline)
-        }
-        if (!settings.aiConsentGiven) {
-            return TranslationOutcome.Unavailable("Open the app and allow AI translation to use it", offline)
+            return TranslationOutcome.Unavailable("AI translation is switched off in the app")
         }
         if (quota.isExhausted(clock())) {
-            return TranslationOutcome.Unavailable("Hourly AI limit reached. ${quota.resetHint(clock())}", offline)
+            return TranslationOutcome.Unavailable("Hourly AI limit reached. ${quota.resetHint(clock())}")
         }
 
         return when (val result = remote.translate(clean)) {
@@ -107,10 +94,10 @@ class Translator(
                 if (looksLikeLimit(result.message)) {
                     quota.noteExhausted(clock(), result.resetAtEpochSeconds)
                 }
-                TranslationOutcome.Unavailable("AI translation refused: ${result.message}", offline)
+                TranslationOutcome.Unavailable("AI translation refused: ${result.message}")
             }
 
-            is ApiResult.Failed -> TranslationOutcome.Unavailable(result.message, offline)
+            is ApiResult.Failed -> TranslationOutcome.Unavailable(result.message)
         }
     }
 

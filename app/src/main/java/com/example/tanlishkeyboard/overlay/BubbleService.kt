@@ -25,6 +25,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.tanlishkeyboard.MainActivity
 import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
+import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.translate.AndroidClipboard
 import com.example.tanlishkeyboard.translate.ButtonOutcome
 import com.example.tanlishkeyboard.translate.ButtonTranslator
@@ -57,6 +58,9 @@ class BubbleService : Service() {
 
     private val state = mutableStateOf(BubbleState())
 
+    /** The user's opacity setting, held as state so moving the slider updates a button already on screen. */
+    private val opacity = mutableStateOf(Settings.DEFAULT_BUBBLE_OPACITY)
+
     private var bubble: ComposeView? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var hint: LinearLayout? = null
@@ -77,6 +81,7 @@ class BubbleService : Service() {
         super.onCreate()
         isRunning = true
         services = AppServices.get(this)
+        opacity.value = services.settings.bubbleOpacity
         windowManager = getSystemService(WindowManager::class.java)
         lifecycleOwner = WindowLifecycleOwner().also {
             it.onCreate()
@@ -93,7 +98,12 @@ class BubbleService : Service() {
         settle()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_APPEARANCE) {
+            opacity.value = services.settings.bubbleOpacity
+        }
+        return START_STICKY
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -138,12 +148,13 @@ class BubbleService : Service() {
         if (state.value.phase != BubblePhase.Working) {
             state.value = BubbleState()
         }
+        opacity.value = services.settings.bubbleOpacity
 
         val view = ComposeView(this)
         installOwners(view)
         view.setContent {
             TanlishKeyboardTheme {
-                BubbleRoot(state = state.value, callbacks = callbacks)
+                BubbleRoot(state = state.value, callbacks = callbacks, opacity = opacity.value)
             }
         }
 
@@ -426,6 +437,7 @@ class BubbleService : Service() {
     companion object {
         const val BUBBLE_SIZE_DP = 56
         private const val MARGIN_DP = 8
+        private const val ACTION_APPEARANCE = "com.example.tanlishkeyboard.action.APPEARANCE"
 
         private val HINT_SURFACE = 0xE6141A1F.toInt()
         private val HINT_TEXT = 0xFFF2F5F7.toInt()
@@ -445,6 +457,16 @@ class BubbleService : Service() {
 
         fun stop(context: Context) {
             runCatching { context.stopService(Intent(context, BubbleService::class.java)) }
+        }
+
+        /** Re-reads the button's look after the opacity slider moved in the app. */
+        fun refreshAppearance(context: Context) {
+            if (!isRunning) return
+            runCatching {
+                context.startService(
+                    Intent(context, BubbleService::class.java).setAction(ACTION_APPEARANCE),
+                )
+            }
         }
     }
 }

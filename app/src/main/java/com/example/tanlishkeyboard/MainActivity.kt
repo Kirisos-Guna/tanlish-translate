@@ -20,12 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +45,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
+import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.overlay.BubbleService
 import com.example.tanlishkeyboard.translate.AndroidClipboard
 import com.example.tanlishkeyboard.translate.ButtonOutcome
@@ -53,6 +54,7 @@ import com.example.tanlishkeyboard.translate.EditableField
 import com.example.tanlishkeyboard.translate.FieldProvider
 import com.example.tanlishkeyboard.ui.theme.TanlishKeyboardTheme
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -117,10 +119,8 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
     var buttonWanted by remember { mutableStateOf(services.settings.bubbleEnabled) }
     var buttonRunning by remember { mutableStateOf(BubbleService.isRunning) }
 
-    var consentGiven by remember { mutableStateOf(services.settings.aiConsentGiven) }
     var allowNetwork by remember { mutableStateOf(services.settings.allowNetwork) }
-    var showConsent by remember { mutableStateOf(false) }
-    var cacheSize by remember { mutableStateOf(services.cache.size()) }
+    var opacity by remember { mutableStateOf(services.settings.bubbleOpacity) }
 
     var playground by remember { mutableStateOf("") }
     var previous by remember { mutableStateOf<String?>(null) }
@@ -132,7 +132,7 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
         accessibilityOn = MainActivity.isAccessibilityServiceEnabled(context)
         buttonWanted = services.settings.bubbleEnabled
         buttonRunning = BubbleService.isRunning
-        cacheSize = services.cache.size()
+        opacity = services.settings.bubbleOpacity
         // The service can be killed in the background; the user asked for a button, so put it back.
         if (buttonWanted && !BubbleService.isRunning) {
             BubbleService.start(context)
@@ -234,21 +234,32 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                         },
                     )
                 }
-            }
-        }
 
-        if (!consentGiven) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("AI translation sends text to easytamiltyping.com", style = MaterialTheme.typography.titleMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Button opacity", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "${(opacity * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Slider(
+                        value = opacity,
+                        onValueChange = { value ->
+                            opacity = value
+                            services.settings.bubbleOpacity = value
+                            BubbleService.refreshAppearance(context)
+                        },
+                        valueRange = Settings.MIN_BUBBLE_OPACITY..Settings.MAX_BUBBLE_OPACITY,
+                    )
                     Text(
-                        "Only when you tap the button: the text of the field you are in is sent once and " +
-                            "translated there. Results are cached on the device so the same sentence never " +
-                            "costs a second request. The endpoint allows roughly 15 requests an hour, so " +
-                            "translations fall back to the offline glossary when the budget is used up.",
+                        "How see-through the circle is while it floats over your apps.",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Button(onClick = { showConsent = true }) { Text("Review and allow") }
                 }
             }
         }
@@ -280,10 +291,6 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                     Button(
                         enabled = !busy && playground.isNotBlank(),
                         onClick = {
-                            if (!services.settings.aiConsentGiven) {
-                                showConsent = true
-                                return@Button
-                            }
                             val raw = playground
                             val field = object : EditableField {
                                 override val isPassword = false
@@ -307,7 +314,6 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                                     is ButtonOutcome.Replaced -> {
                                         previous = raw
                                         resultNote = outcome.message
-                                        cacheSize = services.cache.size()
                                     }
 
                                     is ButtonOutcome.Copied -> {
@@ -361,64 +367,12 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                     )
                 }
                 Text(
-                    "Turn this off and the button only uses the bundled glossary, word by word, with no " +
-                        "network at all. Turn it back on whenever you want the AI again.",
+                    "Leave this on and the button translates with AI. Turn it off and it sends nothing " +
+                        "anywhere — it will simply tell you that AI translation is switched off.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
-
-        Card(Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text("Saved translations: $cacheSize", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Cached results never consume an AI request.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                TextButton(onClick = {
-                    services.cache.clear()
-                    cacheSize = services.cache.size()
-                }) { Text("Clear") }
-            }
-        }
-    }
-
-    if (showConsent) {
-        AlertDialog(
-            onDismissRequest = { showConsent = false },
-            title = { Text("Allow AI translation?") },
-            text = {
-                Text(
-                    "When you tap the translate button, the whole text of the field you are in is sent to " +
-                        "easytamiltyping.com and translated there. Nothing is read while you type, password " +
-                        "fields are skipped, and you can turn this off again at any time.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    services.settings.aiConsentGiven = true
-                    services.settings.allowNetwork = true
-                    consentGiven = true
-                    allowNetwork = true
-                    showConsent = false
-                }) { Text("Allow") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    services.settings.aiConsentGiven = false
-                    consentGiven = false
-                    showConsent = false
-                }) { Text("Not now") }
-            },
-        )
     }
 }
 
