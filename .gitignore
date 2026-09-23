@@ -1,0 +1,30 @@
+# Android Studio / IntelliJ state (machine-specific, recreated on open)
+/.idea/
+*.iml
+
+# Gradle
+.gradle
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+/.kotlin/
+
+# Local SDK path
+local.properties
+
+# Freebuff writes a per-checkout project id here
+/.freebuff/
+
+# Release signing material - must never be committed
+/keystore/
+keystore.properties
+
+# Python bytecode from tools/make_icons.py runs
+__pycache__/
+*.pyc
+
+# OS noise
+.DS_Store
+Thumbs.db

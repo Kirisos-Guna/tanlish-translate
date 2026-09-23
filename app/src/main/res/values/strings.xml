@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Tanlish Translate</string>
+    <string name="accessibility_service_label">Tanlish Translate</string>
+    <string name="accessibility_service_description">Reads the text field you are in, but only when you tap the floating translate button, and puts the English back in its place.</string>
+</resources>

@@ -1,0 +1,378 @@
+# Tanglish -> English glossary bundled with the keyboard.
+# Format: <tanglish> TAB <english> TAB <tamil, optional>
+# The Tamil column is used by the offline Tamil-script fallback mode. When it is
+# empty the phonetic rule engine is used, which is correct often enough for casual
+# typing but cannot tell the Tamil letter variants (ந/ண/ன, த/ட, ர/ற) apart.
+# Lines starting with # and blank lines are ignored.
+#
+# Conversational greetings and politeness
+vanakkam	hello	வணக்கம்
+romba	very	ரொம்ப
+hi	hi	ஹாய்
+hai	hi	ஹாய்
+hello	hello	ஹலோ
+bye	bye	பை
+nandri	thank you	நன்றி
+romba nandri	thank you very much	ரொம்ப நன்றி
+paravailla	it's okay	பரவால்ல
+paravala	it's okay	பரவால்ல
+mannikkavum	sorry	மன்னிக்கவும்
+mannippu	forgiveness	மன்னிப்பு
+thayavu seydu	please	தயவு செய்து
+santhosham	happy	சந்தோஷம்
+santhoshama irukken	i am happy	சந்தோஷமா இருக்கேன்
+kaalai vanakkam	good morning	காலை வணக்கம்
+madhiya vanakkam	good afternoon	மதிய வணக்கம்
+maalai vanakkam	good evening	மாலை வணக்கம்
+iravu vanakkam	good night	இரவு வணக்கம்
+vaazhthukkal	congratulations	வாழ்த்துக்கள்
+pudhu varusham vazhthukkal	happy new year	புத்தாண்டு வாழ்த்துக்கள்
+pirandha naal vazhthukkal	happy birthday	பிறந்த நாள் வாழ்த்துக்கள்
+nalla irunga	take care	நல்லா இருங்க
+sari sari	okay okay	சரி சரி
+sari	okay	சரி
+seri	okay	சரி
+ok	okay	
+okay	okay	
+no problem	no problem	
+wait	wait	
+konjam wait	wait a bit	கொஞ்சம் வெயிட்
+wait pannunga	please wait	வெயிட் பண்ணுங்க
+
+# Questions
+epdi	how	எப்படி
+epdi irukka	how are you	எப்படி இருக்க
+epdi irukeenga	how are you (polite)	எப்படி இருக்கீங்க
+epdi irukkinga	how are you (polite)	எப்படி இருக்கீங்க
+naan nalla irukken	i am fine	நான் நல்லா இருக்கேன்
+enna	what	என்ன
+enna panra	what are you doing	என்ன பண்ற
+enna nadakuthu	what is happening	என்ன நடக்குது
+enna aachu	what happened	என்ன ஆச்சு
+enna venum	what do you want	என்ன வேணும்
+enna solla	what to say	என்ன சொல்ல
+edhukku	why	எதுக்கு
+yen	why	ஏன்
+enge	where	எங்கே
+enge po	where to go	எங்க போ
+enge irukka	where are you	எங்க இருக்க
+yaaru	who	யாரு
+yaaru anga	who is there	யாரு அங்க
+eppo	when	எப்போ
+eppo varuva	when will you come	எப்போ வருவ
+evlo	how much	எவ்வளவு
+evlo neram	how long	எவ்வளவு நேரம்
+edhu	which	எது
+puriyudha	do you understand	புரியுதா
+puriyala	i don't understand	புரியல
+enakku puriyala	i don't understand	எனக்கு புரியல
+theriyuma	do you know	தெரியுமா
+theriyala	i don't know	தெரியல
+sollunga	please tell me	சொல்லுங்க
+epdi pochu	how did it go	எப்படி போச்சு
+
+# Agreement and ability
+aama	yes	ஆமா
+aamam	yes	ஆமாம்
+illa	no	இல்லை
+illai	no	இல்லை
+kandippa	definitely	கண்டிப்பா
+venum	want	வேண்டும்
+venam	don't want	வேண்டாம்
+vendam	no need	வேண்டாம்
+mudiyum	i can	முடியும்
+mudiyadhu	cannot	முடியாது
+mudiyala	i can't	முடியல
+mudiyumaa	can you	முடியுமா
+koodadhu	should not	கூடாது
+podhum	enough	போதும்
+enakku venum	i want it	எனக்கு வேணும்
+enakku pidikkum	i like it	எனக்கு பிடிக்கும்
+romba pidikkum	i like it a lot	ரொம்ப பிடிக்கும்
+pidikkala	i don't like it	பிடிக்கல
+
+# Pronouns
+naan	i	நான்
+naanum	i too	நானும்
+nee	you	நீ
+neenga	you (polite)	நீங்க
+avan	he	அவன்
+aval	she	அவள்
+adhu	it	அது
+avanga	they	அவங்க
+naanga	we	நாங்க
+namma	we	நம்ம
+en	my	என்
+un	your	உன்
+unga	your (polite)	உங்க
+enakku	to me	எனக்கு
+unakku	to you	உனக்கு
+ungalukku	to you (polite)	உங்களுக்கு
+ellam	everything	எல்லாம்
+onnum illa	nothing	ஒன்னும் இல்லை
+onnum	nothing	ஒன்னும்
+vera	other	வேற
+adhe	same	அதே
+kooda	also	கூட
+illama	without	இல்லாம
+mattum	only	மட்டும்
+thanimai	lonely	தனிமை
+
+# Family and people
+amma	mother	அம்மா
+appa	father	அப்பா
+akka	elder sister	அக்கா
+anna	elder brother	அண்ணா
+thambi	younger brother	தம்பி
+thangachi	younger sister	தங்கச்சி
+paatti	grandmother	பாட்டி
+thattha	grandfather	தாத்தா
+mama	uncle	மாமா
+chithi	aunt	சித்தி
+athai	aunt	அத்தை
+magan	son	மகன்
+magal	daughter	மகள்
+kuzhandhai	child	குழந்தை
+purushan	husband	புருஷன்
+pondatti	wife	பொண்டாட்டி
+nanban	friend	நண்பன்
+nanba	friend	நண்பா
+nanbi	friend	நண்பி
+maama	guy	மாமா
+thalaiva	boss	தலைவா
+sir	sir	
+madam	madam	
+boss	boss	
+
+# Everyday verbs
+po	go	போ
+povom	let's go	போவோம்
+vaa	come	வா
+vaanga	come (polite)	வாங்க
+varen	i will come	வரேன்
+vandhuten	i have come	வந்துட்டேன்
+saapdu	eat	சாப்பிடு
+saapdunga	please eat	சாப்பிடுங்க
+saapten	i ate	சாப்பிட்டேன்
+saapteengala	did you eat	சாப்பிட்டீங்களா
+saapidalam	let's eat	சாப்பிடலாம்
+thoongu	sleep	தூங்கு
+thoongiten	i slept	தூங்கிட்டேன்
+ezhunthu	get up	எழுந்து
+ezhudhu	write	எழுது
+padi	read	படி
+pesu	speak	பேசு
+pesalam	let's talk	பேசலாம்
+kelunga	please ask	கேளுங்க
+paaru	look	பாரு
+paarunga	please look	பாருங்க
+paakalam	let's see	பாக்கலாம்
+paathen	i saw	பார்த்தேன்
+kekkuren	i am listening	கேக்குறேன்
+sollu	say	சொல்லு
+solliten	i said	சொல்லிட்டேன்
+velai sey	work	வேலை செய்
+nadakka	walk	நடக்க
+oodu	run	ஓடு
+nikku	stand	நிக்கு
+ukkaaru	sit	உக்காரு
+podu	put	போடு
+edu	take	எடு
+kudu	give	குடு
+kudunga	please give	குடுங்க
+kuduthudunga	please give me	குடுத்துடுங்க
+vaangu	buy	வாங்க
+thira	open	திற
+moodu	close	மூடு
+katti	tie/build	கட்டி
+aadu	dance	ஆடு
+paadu	sing	பாடு
+sirikku	laugh	சிரி
+azhu	cry	அழு
+nenaikku	think	நெனைக்க
+marandhu	forget	மறந்து
+vittudu	leave it	விடுடு
+vidunga	leave it (polite)	விடுங்க
+thodangu	start	தொடங்கு
+mudichiten	i finished	முடிச்சிட்டேன்
+pannu	do	பண்ணு
+pannunga	please do	பண்ணுங்க
+panniten	i did	பண்ணிட்டேன்
+pannuvom	let's do	பண்ணுவோம்
+call pannu	call me	கால் பண்ணு
+call pannunga	please call	கால் பண்ணுங்க
+message pannu	message me	மெசேஜ் பண்ணு
+reply pannu	reply	ரிப்ளை பண்ணு
+wait pannu	wait	வெயிட் பண்ணு
+sapadunga	please eat	சாப்பிடுங்க
+
+# State of things
+irukku	it is	இருக்கு
+irukken	i am	இருக்கேன்
+irundhuchu	it was	இருந்துச்சு
+pochu	it went	போச்சு
+aachu	it happened	ஆச்சு
+aagum	it will happen	ஆகும்
+varuthu	coming	வருது
+vandhuduchu	it came	வந்துடுச்சு
+nadakuthu	happening	நடக்குது
+mudicha	finished	முடிச்ச
+busy	busy	பிஸி
+busy a iruken	i am busy	பிஸியா இருக்கேன்
+
+# Time
+ippo	now	இப்போ
+ippove	right now	இப்போவே
+appuram	later	அப்புறம்
+innaiku	today	இன்னைக்கு
+naalai	tomorrow	நாளை
+netru	yesterday	நேற்று
+kaalai	morning	காலை
+madhiyam	noon	மதியம்
+maalai	evening	மாலை
+iravu	night	இரவு
+neram	time	நேரம்
+mani	o'clock	மணி
+vaaram	week	வாரம்
+maasam	month	மாசம்
+varusham	year	வருஷம்
+indha	this	இந்த
+adutha	next	அடுத்த
+munnadi	before	முன்னாடி
+pinnaadi	after	பின்னாடி
+seekiram	soon	சீக்கிரம்
+medhuva	slowly	மெதுவா
+eppovum	always	எப்போவும்
+appo	then	அப்போ
+adhanala	so	அதனால
+aana	but	ஆனா
+
+# Places and things
+veedu	house	வீடு
+veetla	at home	வீட்டுல
+kadai	shop	கடை
+sandhai	market	சந்தை
+theru	street	தெரு
+saalai	road	சாலை
+oor	town	ஊர்
+pattanam	city	பட்டணம்
+kovil	temple	கோவில்
+pallikoodam	school	பள்ளிக்கூடம்
+college	college	காலேஜ்
+hospital	hospital	ஹாஸ்பிட்டல்
+kadal	sea	கடல்
+malai	hill	மலை
+aaru	river	ஆறு
+kaadu	forest	காடு
+naadu	country	நாடு
+veliye	outside	வெளியே
+ulle	inside	உள்ளே
+keezhe	below	கீழே
+mele	above	மேலே
+pakathula	nearby	பக்கத்துல
+dhooram	distance	தூரம்
+bus	bus	பஸ்
+train	train	ட்ரெயின்
+auto	auto	ஆட்டோ
+car	car	கார்
+bike	bike	பைக்
+ticket	ticket	டிக்கெட்
+phone	phone	போன்
+mobile	mobile	மொபைல்
+
+# Money and work
+kaasu	money	காசு
+panam	money	பணம்
+bank	bank	பேங்க்
+velai	work	வேலை
+office	office	ஆபீஸ்
+company	company	கம்பெனி
+saambalam	salary	சம்பளம்
+kadam	loan	கடன்
+kalvi	education	கல்வி
+padipu	studies	படிப்பு
+marundhu	medicine	மருந்து
+vali	pain	வலி
+sudu	fever	சூடு
+kuliru	cold	குளிர்
+noy	illness	நோய்
+
+# Food
+sapadu	food	சாப்பாடு
+thanni	water	தண்ணி
+paal	milk	பால்
+kaapi	coffee	காபி
+tea	tea	டீ
+soru	cooked rice	சோறு
+choru	cooked rice	சோறு
+dosai	dosa	தோசை
+idli	idli	இட்லி
+pongal	pongal	பொங்கல்
+sambar	sambar	சாம்பார்
+rasam	rasam	ரசம்
+vadai	vada	வடை
+biryani	biryani	பிரியாணி
+kari	curry	கரி
+meen	fish	மீன்
+kozhi	chicken	கோழி
+muttai	egg	முட்டை
+kaai	vegetable	காய்
+pazham	fruit	பழம்
+uppu	salt	உப்பு
+kaaram	spicy	காரம்
+puli	tamarind	புளி
+vellam	jaggery	வெல்லம்
+sarkarai	sugar	சர்க்கரை
+ennai	oil	எண்ணெய்
+hotel	restaurant	ஹோட்டல்
+pasikkuthu	i am hungry	பசிக்குது
+
+# Numbers and quantity
+onnu	one	ஒன்று
+rendu	two	இரண்டு
+moonu	three	மூன்று
+naalu	four	நான்கு
+anju	five	ஐந்து
+aaru	six	ஆறு
+ezhu	seven	ஏழு
+ettu	eight	எட்டு
+ombodhu	nine	ஒன்பது
+pathu	ten	பத்து
+nooru	hundred	நூறு
+aayiram	thousand	ஆயிரம்
+konjam	a little	கொஞ்சம்
+konjam konjam	a little bit	கொஞ்சம் கொஞ்சம்
+neraiya	a lot	நிறைய
+
+# Feelings and description
+nalla	good	நல்ல
+nalla irukku	it is good	நல்லா இருக்கு
+romba nalla irukku	it is very good	ரொம்ப நல்லா இருக்கு
+mosam	bad	மோசம்
+periya	big	பெரிய
+sinna	small	சின்ன
+puthu	new	புது
+pazhaya	old	பழைய
+azhaga	beautiful	அழகா
+azhaga irukku	it looks beautiful	அழகா இருக்கு
+kashtam	difficult	கஷ்டம்
+sulabham	easy	சுலபம்
+kovam	anger	கோவம்
+kavalai	worry	கவலை
+bayam	fear	பயம்
+sogam	sad	சோகம்
+thookam	sleepy	தூக்கம்
+manasu	mind	மனசு
+nenju	heart	நெஞ்சு
+kaadhal	love	காதல்
+uyir	life	உயிர்
+udambu	body	உடம்பு
+thala	head	தலை
+kai	hand	கை
+kaal	leg	கால்
+kann	eye	கண்
+mooku	nose	மூக்கு
+kaadhu	ear	காது
+vayiru	stomach	வயிறு
+viral	finger	விரல்
+mudi	hair	முடி
