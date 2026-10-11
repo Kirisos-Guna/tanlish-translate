@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import com.example.tanlishkeyboard.data.ListeningMode
 
 /**
  * Tamil speech, through the recogniser the phone already has.
@@ -28,23 +29,31 @@ class TamilSpeechListener(
     private val buildRecogniser: (Context) -> SpeechRecognizer? = ::newRecogniser,
 ) : SpeechListener {
 
-    override fun listen(onEvent: (SpeechEvent) -> Unit): SpeechSession {
+    override fun listen(mode: ListeningMode, onEvent: (SpeechEvent) -> Unit): SpeechSession {
         val recogniser = buildRecogniser(context)
         if (recogniser == null) {
             handler.post { onEvent(SpeechEvent.Failed(SpeechFailure.NoRecogniser)) }
             return NoSession
         }
-        return Session(recogniser, handler, requestIntent(), onEvent).also { it.start() }
+        return Session(recogniser, handler, requestIntent(mode), onEvent).also { it.start() }
     }
 
     /** What Android is asked to recognise with: Tamil, one answer, and partials for live feedback. */
-    private fun requestIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+    private fun requestIntent(mode: ListeningMode): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, TAMIL)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, TAMIL)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+
+        silenceMillis(mode)?.let { (complete, possiblyComplete) ->
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, complete)
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                possiblyComplete,
+            )
+        }
     }
 
     /**
@@ -160,6 +169,25 @@ class TamilSpeechListener(
 
         /** How long to wait for an answer after the user lets go of the button. */
         const val STOP_TIMEOUT_MS = 6_000L
+
+        /** How long the recogniser should wait out a pause before calling the sentence finished. */
+        private const val COMPLETE_SILENCE_MS = 8_000L
+        private const val POSSIBLY_COMPLETE_SILENCE_MS = 4_000L
+
+        /**
+         * How long a pause may last before the recogniser decides the sentence is over, or null to
+         * leave the recogniser's own default alone.
+         *
+         * Held: the finger ends the sentence, so there is nothing to wait for. Tapped: the user may
+         * well be thinking mid-sentence, and a recogniser that gave up on the first pause would end
+         * the session before they ever tapped it. These are requests, and a recognition service is
+         * free to ignore them — in which case the session ends on its own silence timeout and the
+         * English is written early, rather than not at all.
+         */
+        fun silenceMillis(mode: ListeningMode): Pair<Long, Long>? = when (mode) {
+            ListeningMode.WhileHeld -> null
+            ListeningMode.UntilTapped -> COMPLETE_SILENCE_MS to POSSIBLY_COMPLETE_SILENCE_MS
+        }
 
         private fun newRecogniser(context: Context): SpeechRecognizer? =
             runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()

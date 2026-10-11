@@ -28,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -49,6 +50,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
+import com.example.tanlishkeyboard.data.ListeningMode
 import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.overlay.BubbleService
 import com.example.tanlishkeyboard.speech.Microphone
@@ -132,6 +134,7 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
     var allowNetwork by remember { mutableStateOf(services.settings.allowNetwork) }
     var opacity by remember { mutableStateOf(services.settings.bubbleOpacity) }
     var micAllowed by remember { mutableStateOf(Microphone.granted(context)) }
+    var listeningMode by remember { mutableStateOf(services.settings.listeningMode) }
 
     var playground by remember { mutableStateOf("") }
     var previous by remember { mutableStateOf<String?>(null) }
@@ -170,6 +173,11 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
     val micLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { micAllowed = Microphone.granted(context) }
+
+    fun selectListeningMode(chosen: ListeningMode) {
+        listeningMode = chosen
+        services.settings.listeningMode = chosen
+    }
 
     fun requestMicrophone() {
         // The listening notice is optional: without it on Android 13+ the service still runs, it just
@@ -289,6 +297,25 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                     actionLabel = "Allow microphone",
                     onAction = { requestMicrophone() },
                 )
+
+                // Not a setup step: a matter of taste, and the floating button reads it on every press.
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Ending a spoken sentence", style = MaterialTheme.typography.bodyMedium)
+                    ListeningModeChoice(
+                        selected = listeningMode == ListeningMode.WhileHeld,
+                        title = "Hold to talk",
+                        body = "Listening lasts as long as you hold the button: let go and the English is " +
+                            "written into the field.",
+                        onSelect = { selectListeningMode(ListeningMode.WhileHeld) },
+                    )
+                    ListeningModeChoice(
+                        selected = listeningMode == ListeningMode.UntilTapped,
+                        title = "Tap to stop",
+                        body = "Hold the button to start listening, speak at your own pace, then tap the " +
+                            "button when you have finished.",
+                        onSelect = { selectListeningMode(ListeningMode.UntilTapped) },
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -425,7 +452,9 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                             speakNote = null
                             speakUndoOffered = false
                             listening = true
-                            session = speech.listen { event ->
+                            // This button stops on a tap by nature, but the mode still decides how long
+                            // the recogniser waits out a pause, so trying it here matches the real thing.
+                            session = speech.listen(listeningMode) { event ->
                                 when (event) {
                                     is SpeechEvent.Partial -> speakNote = "Hearing \u201c${event.text}\u201d"
 
@@ -508,6 +537,22 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ListeningModeChoice(
+    selected: Boolean,
+    title: String,
+    body: String,
+    onSelect: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.Top) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Column(Modifier.padding(top = 10.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(body, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

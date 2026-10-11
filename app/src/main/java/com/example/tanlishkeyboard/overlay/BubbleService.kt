@@ -32,6 +32,7 @@ import com.example.tanlishkeyboard.MainActivity
 import com.example.tanlishkeyboard.R
 import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
+import com.example.tanlishkeyboard.data.ListeningMode
 import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.speech.Microphone
 import com.example.tanlishkeyboard.speech.SpeechErrors
@@ -94,20 +95,36 @@ class BubbleService : Service() {
     /** Translating what was just said; a stray tap must not race with it. */
     private var voiceJob: Job? = null
 
+    /**
+     * How the user wants a session to end, read fresh on every press so that changing it in the app
+     * applies to the next hold rather than to the next restart.
+     */
+    private val mode: ListeningMode get() = services.settings.listeningMode
+
     private val callbacks = object : BubbleCallbacks {
-        override fun onTap() = translateFocusedField()
-        override fun onHold() = beginListening()
-        override fun onRelease() = endListening()
+        override fun onTap() = act(ListeningGestures.tap(listening, voiceJob?.isActive == true, mode))
+        override fun onHold() = act(ListeningGestures.hold(listening))
+        override fun onRelease() = act(ListeningGestures.release(listening, mode))
         override fun onDrag(dx: Float, dy: Float) = moveBy(dx, dy)
 
         override fun onDragEnd() {
             settle()
             // A hold that turned into a drag still ends when the finger comes up, and that release
             // never reaches the press gesture once the drag has taken the pointer over.
-            endListening()
+            act(ListeningGestures.release(listening, mode))
         }
 
         override fun onUndo() = undo()
+    }
+
+    /** Carries out whatever a press means right now; [ListeningGestures] decides what that is. */
+    private fun act(gesture: BubbleGesture) {
+        when (gesture) {
+            BubbleGesture.TranslateField -> translateFocusedField()
+            BubbleGesture.StartListening -> beginListening()
+            BubbleGesture.StopListening -> endListening()
+            BubbleGesture.Nothing -> Unit
+        }
     }
 
     override fun onCreate() {
@@ -373,13 +390,18 @@ class BubbleService : Service() {
         }
 
         listening = true
-        state.value = BubbleState(phase = BubblePhase.Listening, hint = "Listening… speak Tamil")
+        state.value = BubbleState(phase = BubblePhase.Listening, hint = ListeningGestures.listeningHint(mode))
         showHint(null)
         listenForeground()
-        session = speech.listen(::onSpeechEvent)
+        session = speech.listen(mode, ::onSpeechEvent)
     }
 
-    /** Letting go stops the capture; the words arrive a moment later, through [onSpeechEvent]. */
+    /**
+     * Ends the capture; the words arrive a moment later, through [onSpeechEvent].
+     *
+     * Whether that was a finger lifting or a second tap is the mode's business and not this method's:
+     * [ListeningGestures] has already decided that the session should stop.
+     */
     private fun endListening() {
         if (!listening) return
         session?.stop()
@@ -390,7 +412,10 @@ class BubbleService : Service() {
             is SpeechEvent.Partial -> {
                 if (!listening) return
                 // Reading the words back is how the user sees the microphone picking Tamil up.
-                state.value = BubbleState(phase = BubblePhase.Listening, hint = "Hearing “${event.text}”")
+                state.value = BubbleState(
+                    phase = BubblePhase.Listening,
+                    hint = ListeningGestures.hearingHint(event.text, mode),
+                )
                 renderHint()
             }
 
@@ -568,7 +593,8 @@ class BubbleService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_bubble_mark)
             .setContentTitle("Listening in Tamil")
-            .setContentText("Let go of the button when you have finished speaking")
+            // The notice has to say what ends the session too: it outlives the pill on screen.
+            .setContentText(ListeningGestures.listeningHint(mode))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setContentIntent(openAppIntent())

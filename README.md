@@ -15,8 +15,9 @@ button and the sentence in that field becomes *Hello friend, how are you?*
 
 - **Any app** — WhatsApp, Messages, Gmail, Chrome. Anything with a text field.
 - **One tap for the whole sentence**, not a keyboard to learn and not a word-by-word popup.
-- **Press and hold to speak** — say it in Tamil instead of typing, release, and the English is in the
-  same field. Speaking is listened to only while the button is held.
+- **Press and hold to speak** — say it in Tamil instead of typing and the English is in the same
+  field. End the sentence by letting go, or by tapping the button if you would rather take your time
+  saying it.
 - **Each sentence is only ever translated once** — the result is saved on the device, so a phrase you
   use again costs nothing and works with no connection at all.
 - **Adjustable opacity** — a slider in the app sets how see-through the circle is over your apps.
@@ -54,16 +55,23 @@ clears its cached translations, quota counter and settings.
 
 ## Speaking instead of typing
 
-Hold the button down and speak Tamil; let go and it stops listening. The words are read back to you
-in the pill beside the button while you talk, and a few moments after you let go the English replaces
-the field you were in — the same field the tap path writes to, with the same Undo.
+Hold the button down and speak Tamil. How it stops is up to you — either letting go of the button,
+or tapping it when you have finished. The words are read back to you in the pill beside the button
+while you talk, and a few moments after the session ends the English replaces the field you were in —
+the same field the tap path writes to, with the same Undo.
 
 - **Tamil script, not Tanglish.** A microphone cannot hear romanised Tanglish, so the recogniser is
   asked for Tamil (`ta-IN`) and its Tamil script is translated into English. That is why speaking
   needs the phone's Tamil speech support: if the recogniser has none it says so, rather than quietly
   listening for English words.
-- **Only while you hold it.** Android records nothing until the button is pressed, and the hold ends
-  the moment you let go.
+- **Two ways to end a sentence**, chosen on the app's setup screen. *Hold to talk* keeps the
+  microphone open only while your finger is down: let go and the English is written. *Tap to stop*
+  starts on the hold, keeps listening while you say the whole thing at your own pace, and writes the
+  English when you tap the button again. Tap to stop asks the recogniser to wait through a pause in
+  the middle of a sentence; a recogniser that ignores that request writes the English early instead,
+  as soon as you stop talking.
+- **Only while you listen.** Android records nothing until the button is pressed, and the microphone
+  closes the moment the session ends — when your finger comes up, or when you tap the button.
 - **A listening notice is required.** Android does not let a background app keep the microphone open
   without a foreground service, so a small "Listening in Tamil" notice appears in the notification
   shade while you hold the button and goes when you let go. On Android 13+, allowing notifications

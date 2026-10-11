@@ -1,6 +1,23 @@
 package com.example.tanlishkeyboard.data
 
 /**
+ * What ends a listening session once the user has started one.
+ *
+ * Talking into a phone is a matter of taste: some people hold the button like a walkie-talkie and
+ * expect the microphone to close the moment their finger comes off, and some want to press it once,
+ * take their time saying the sentence, and press it again when they are done. Both are offered, and
+ * neither changes what is listened to — only who decides when it stops.
+ */
+enum class ListeningMode {
+
+    /** Listening lasts as long as the button is held down; letting go writes the English. */
+    WhileHeld,
+
+    /** A hold starts listening and keeps it open; tapping the button again writes the English. */
+    UntilTapped,
+}
+
+/**
  * User facing switches and remembered window state.
  *
  * [allowNetwork] is the only control over what leaves the phone: the button reads the field you are
@@ -12,6 +29,20 @@ class Settings(private val store: KeyValueStore) {
     var allowNetwork: Boolean
         get() = store.getString(KEY_ALLOW_NETWORK)?.toBooleanStrictOrNull() ?: true
         set(value) = store.putString(KEY_ALLOW_NETWORK, value.toString())
+
+    /**
+     * How a listening session ends, defaulting to the way the button has always worked: held down.
+     *
+     * The floating button reads this every time it is pressed, so changing it in the app applies to
+     * the very next hold, even with the button already floating.
+     */
+    var listeningMode: ListeningMode
+        get() = when (store.getString(KEY_LISTENING_MODE)) {
+            ListeningMode.UntilTapped.name -> ListeningMode.UntilTapped
+            // Anything else, including a value written by a newer version, falls back to holding.
+            else -> ListeningMode.WhileHeld
+        }
+        set(value) = store.putString(KEY_LISTENING_MODE, value.name)
 
     /**
      * How opaque the floating button is drawn, 0.2 to 1.0.
@@ -62,6 +93,7 @@ class Settings(private val store: KeyValueStore) {
         const val DEFAULT_BUBBLE_OPACITY = 0.76f
 
         private const val KEY_ALLOW_NETWORK = "allow_network"
+        private const val KEY_LISTENING_MODE = "listening_mode"
         private const val KEY_BUBBLE_OPACITY = "bubble_opacity"
         private const val KEY_BUBBLE_ENABLED = "bubble_enabled"
         private const val KEY_BUBBLE_X = "bubble_x"

@@ -1,5 +1,7 @@
 package com.example.tanlishkeyboard.speech
 
+import com.example.tanlishkeyboard.data.ListeningMode
+
 /** One listening session: a press and hold of the button, from the press to the release. */
 interface SpeechSession {
 
@@ -43,6 +45,12 @@ enum class SpeechFailure {
  */
 interface SpeechListener {
 
-    /** Starts one session; every event for it is delivered back through [onEvent]. */
-    fun listen(onEvent: (SpeechEvent) -> Unit): SpeechSession
+    /**
+     * Starts one session; every event for it is delivered back through [onEvent].
+     *
+     * [mode] is a hint about who will end the session: a recogniser that knows a pause may be followed
+     * by more words can wait longer before deciding the speaker has finished. Nothing shows on screen
+     * for an already running session, so the mode is only ever read as it starts.
+     */
+    fun listen(mode: ListeningMode, onEvent: (SpeechEvent) -> Unit): SpeechSession
 }

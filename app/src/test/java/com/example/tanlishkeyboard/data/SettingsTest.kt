@@ -39,6 +39,22 @@ class SettingsTest {
     }
 
     @Test
+    fun `listening ends when the button is let go, until the user says otherwise`() {
+        assertEquals(ListeningMode.WhileHeld, settings.listeningMode)
+
+        settings.listeningMode = ListeningMode.UntilTapped
+
+        assertEquals(ListeningMode.UntilTapped, Settings(store).listeningMode)
+    }
+
+    @Test
+    fun `a listening mode written by a newer version falls back to holding`() {
+        store.putString("listening_mode", "SomeFutureMode")
+
+        assertEquals(ListeningMode.WhileHeld, settings.listeningMode)
+    }
+
+    @Test
     fun `ai translation is on until it is switched off`() {
         assertTrue(settings.allowNetwork)
 
