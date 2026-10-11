@@ -1,15 +1,19 @@
 package com.example.tanlishkeyboard
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings as AndroidSettings
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,11 +51,17 @@ import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
 import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.overlay.BubbleService
+import com.example.tanlishkeyboard.speech.Microphone
+import com.example.tanlishkeyboard.speech.SpeechErrors
+import com.example.tanlishkeyboard.speech.SpeechEvent
+import com.example.tanlishkeyboard.speech.SpeechSession
+import com.example.tanlishkeyboard.speech.TamilSpeechListener
 import com.example.tanlishkeyboard.translate.AndroidClipboard
 import com.example.tanlishkeyboard.translate.ButtonOutcome
 import com.example.tanlishkeyboard.translate.ButtonTranslator
 import com.example.tanlishkeyboard.translate.EditableField
 import com.example.tanlishkeyboard.translate.FieldProvider
+import com.example.tanlishkeyboard.translate.SpokenTranslator
 import com.example.tanlishkeyboard.ui.theme.TanlishKeyboardTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -121,11 +131,57 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
 
     var allowNetwork by remember { mutableStateOf(services.settings.allowNetwork) }
     var opacity by remember { mutableStateOf(services.settings.bubbleOpacity) }
+    var micAllowed by remember { mutableStateOf(Microphone.granted(context)) }
 
     var playground by remember { mutableStateOf("") }
     var previous by remember { mutableStateOf<String?>(null) }
     var resultNote by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+
+    var listening by remember { mutableStateOf(false) }
+    var session by remember { mutableStateOf<SpeechSession?>(null) }
+    var speakNote by remember { mutableStateOf<String?>(null) }
+    var speakUndoOffered by remember { mutableStateOf(false) }
+
+    val speech = remember { TamilSpeechListener(context) }
+
+    /**
+     * The same shape the accessibility service hands the button, backed by the field above, so the
+     * two try-it-here paths and the floating button all run the same code.
+     */
+    val playgroundField = remember {
+        object : EditableField {
+            override val isPassword = false
+            override fun read(): String = playground
+            override fun replace(text: String): Boolean {
+                playground = text
+                return true
+            }
+        }
+    }
+    val spoken = remember {
+        SpokenTranslator(
+            fields = FieldProvider { playgroundField },
+            clipboard = AndroidClipboard(context),
+            translator = services.spokenTranslator,
+        )
+    }
+
+    val micLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { micAllowed = Microphone.granted(context) }
+
+    fun requestMicrophone() {
+        // The listening notice is optional: without it on Android 13+ the service still runs, it just
+        // shows up in Task Manager instead of the notification shade.
+        val wanted = buildList {
+            add(Microphone.PERMISSION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        micLauncher.launch(wanted.toTypedArray())
+    }
 
     fun refresh() {
         overlayAllowed = MainActivity.canDrawOverlays(context)
@@ -133,6 +189,7 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
         buttonWanted = services.settings.bubbleEnabled
         buttonRunning = BubbleService.isRunning
         opacity = services.settings.bubbleOpacity
+        micAllowed = Microphone.granted(context)
         // The service can be killed in the background; the user asked for a button, so put it back.
         if (buttonWanted && !BubbleService.isRunning) {
             BubbleService.start(context)
@@ -176,7 +233,8 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
         Text(
             "Type Tanglish in any app with your normal keyboard. The small floating button appears while " +
                 "the keyboard is up: tap it and the text in that field is replaced with English, right " +
-                "where you typed it.",
+                "where you typed it. Or press and hold it and just speak Tamil — let go and the English is " +
+                "in the field instead.",
             style = MaterialTheme.typography.bodyMedium,
         )
 
@@ -210,12 +268,26 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                     body = if (buttonWanted && buttonRunning) {
                         "Switched on. The circle appears while the keyboard is up — that is, while you are " +
                             "typing — and disappears when you close the keyboard. Drag it anywhere, tap it " +
-                            "to translate your text, and long press it to hide it for good."
+                            "to translate your text, and press and hold it to speak Tamil into the field. " +
+                            "This switch is also how you get rid of it again."
                     } else {
                         "Turn this on and a small circle showing த will appear whenever you start typing."
                     },
                     actionLabel = null,
                     onAction = {},
+                )
+
+                SetupStep(
+                    done = micAllowed,
+                    title = "4. Allow the microphone (for speaking)",
+                    body = "Only needed if you want to hold the button and talk. Press and hold it and " +
+                        "speak Tamil: the phone's own recogniser, listening in ta-IN, writes down what " +
+                        "it hears and that is translated into English in the field you were in. Nothing " +
+                        "is recorded or sent anywhere until you hold the button. If it tells you Tamil " +
+                        "is not available, open your keyboard's voice typing settings and download " +
+                        "Tamil there.",
+                    actionLabel = "Allow microphone",
+                    onAction = { requestMicrophone() },
                 )
 
                 Row(
@@ -269,7 +341,7 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                 Text("Try it here", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Same code path as the floating button: it reads this field, translates it and writes " +
-                        "the result back into it.",
+                        "the result back into it. The speak button is the floating button's press and hold.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
@@ -292,19 +364,11 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                         enabled = !busy && playground.isNotBlank(),
                         onClick = {
                             val raw = playground
-                            val field = object : EditableField {
-                                override val isPassword = false
-                                override fun read(): String = playground
-                                override fun replace(text: String): Boolean {
-                                    playground = text
-                                    return true
-                                }
-                            }
                             busy = true
                             resultNote = null
                             scope.launch {
                                 val translator = ButtonTranslator(
-                                    fields = FieldProvider { field },
+                                    fields = FieldProvider { playgroundField },
                                     clipboard = AndroidClipboard(context),
                                     translator = services.translator,
                                 )
@@ -339,7 +403,79 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                     }
                 }
 
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        enabled = !busy,
+                        onClick = {
+                            // Tapping again while it listens is the same as letting go: stop, and let
+                            // whatever was heard come back.
+                            if (listening) {
+                                session?.stop()
+                                return@Button
+                            }
+                            // Asked for here rather than only on the setup step above, so the button
+                            // can be tried the moment it is wanted.
+                            if (!micAllowed) {
+                                requestMicrophone()
+                                return@Button
+                            }
+                            speakNote = null
+                            speakUndoOffered = false
+                            listening = true
+                            session = speech.listen { event ->
+                                when (event) {
+                                    is SpeechEvent.Partial -> speakNote = "Hearing \u201c${event.text}\u201d"
+
+                                    is SpeechEvent.Heard -> {
+                                        listening = false
+                                        session = null
+                                        busy = true
+                                        speakNote = "Translating what you said…"
+                                        scope.launch {
+                                            val outcome = spoken.translateSpoken(event.text)
+                                            busy = false
+                                            speakUndoOffered = outcome is ButtonOutcome.Replaced &&
+                                                spoken.canUndo
+                                            speakNote = when (outcome) {
+                                                is ButtonOutcome.Replaced -> outcome.message
+                                                is ButtonOutcome.Copied ->
+                                                    "${outcome.message}. Copied: ${outcome.text}"
+
+                                                is ButtonOutcome.Blocked -> outcome.message
+                                            }
+                                        }
+                                    }
+
+                                    is SpeechEvent.Failed -> {
+                                        listening = false
+                                        session = null
+                                        speakNote = SpeechErrors.message(event.failure)
+                                    }
+                                }
+                            }
+                        },
+                    ) {
+                        Text(if (listening) "Listening… tap to stop" else "Speak Tamil")
+                    }
+
+                    if (speakUndoOffered) {
+                        TextButton(onClick = {
+                            if (spoken.undo()) {
+                                speakUndoOffered = false
+                                speakNote = "Undone"
+                            }
+                        }) { Text("Undo") }
+                    }
+                }
+
                 resultNote?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+
+                speakNote?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall)
                 }
             }

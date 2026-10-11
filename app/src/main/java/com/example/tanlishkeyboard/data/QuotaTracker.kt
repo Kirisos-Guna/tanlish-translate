@@ -4,23 +4,29 @@ package com.example.tanlishkeyboard.data
  * The AI endpoint allows a small number of requests per hour (currently around 15) and reports how
  * many are left in every reply. We remember that so the keyboard can show an honest badge and stop
  * asking once the window is used up.
+ *
+ * [prefix] keeps separate accounts apart. The spoken path reaches keyless web translators that have no
+ * hourly budget of their own, and must not be blocked by whatever the typed path has spent.
  */
-class QuotaTracker(private val store: KeyValueStore) {
+class QuotaTracker(private val store: KeyValueStore, private val prefix: String = "") {
+
+    private val remainingKey = prefix + KEY_REMAINING
+    private val resetAtKey = prefix + KEY_RESET_AT
 
     /** Requests left, or null when the server has not told us yet (or the window has rolled over). */
     fun effectiveRemaining(now: Long): Int? {
         val until = resetAtEpochSeconds()
         if (until != null && until <= now) {
-            store.putString(KEY_REMAINING, null)
-            store.putString(KEY_RESET_AT, null)
+            store.putString(remainingKey, null)
+            store.putString(resetAtKey, null)
             return null
         }
-        return store.getString(KEY_REMAINING)?.toIntOrNull()
+        return store.getString(remainingKey)?.toIntOrNull()
     }
 
     fun update(remaining: Int?, resetAtEpochSeconds: Long?) {
-        store.putString(KEY_REMAINING, remaining?.toString())
-        store.putString(KEY_RESET_AT, resetAtEpochSeconds?.toString())
+        store.putString(remainingKey, remaining?.toString())
+        store.putString(resetAtKey, resetAtEpochSeconds?.toString())
     }
 
     fun isExhausted(now: Long): Boolean {
@@ -47,7 +53,7 @@ class QuotaTracker(private val store: KeyValueStore) {
         return if (isExhausted(now)) "AI off" else "AI $remaining"
     }
 
-    private fun resetAtEpochSeconds(): Long? = store.getString(KEY_RESET_AT)?.toLongOrNull()
+    private fun resetAtEpochSeconds(): Long? = store.getString(resetAtKey)?.toLongOrNull()
 
     private companion object {
         const val KEY_REMAINING = "quota_remaining"

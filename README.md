@@ -4,8 +4,8 @@
 
 <h1 align="center">Tanlish Translate</h1>
 
-<p align="center">Type Tanglish with your normal keyboard, then tap one small floating button: the text in
-that field is replaced with English, right where you typed it.</p>
+<p align="center">Type Tanglish with your normal keyboard and tap one small floating button, or press and hold it
+and just speak Tamil: either way the English lands in the field you were in.</p>
 
 ## What it is
 
@@ -15,14 +15,17 @@ button and the sentence in that field becomes *Hello friend, how are you?*
 
 - **Any app** — WhatsApp, Messages, Gmail, Chrome. Anything with a text field.
 - **One tap for the whole sentence**, not a keyboard to learn and not a word-by-word popup.
+- **Press and hold to speak** — say it in Tamil instead of typing, release, and the English is in the
+  same field. Speaking is listened to only while the button is held.
 - **Each sentence is only ever translated once** — the result is saved on the device, so a phrase you
   use again costs nothing and works with no connection at all.
 - **Adjustable opacity** — a slider in the app sets how see-through the circle is over your apps.
-- **Undo** — a six-second chip puts your Tanglish back.
+- **Undo** — a six-second chip puts your text back, whichever way the English got there.
 
-The button only appears while the keyboard is up. Drag it anywhere; long press hides it.
+The button only appears while the keyboard is up. Drag it anywhere; to get rid of it, turn off
+"Floating button" in the app.
 
-The translation itself is done by AI at `easytamiltyping.com`, so a phrase that has never been
+Typed Tanglish is translated by AI at `easytamiltyping.com`, so a phrase that has never been
 translated before needs an internet connection. There is no offline dictionary: when a request cannot
 be made, the button says so and leaves your text exactly as you typed it.
 
@@ -31,11 +34,15 @@ be made, the button says so and leaves your text exactly as you typed it.
 Download `app-release.apk` from the [latest release](https://github.com/Kirisos-Guna/tanlish-translate/releases/latest)
 and open it on your phone, allowing installation from this source when Android asks.
 
-Then two one-time steps, both on the app's own setup screen:
+Then the one-time steps, all on the app's own setup screen:
 
 1. **Display over other apps** — lets the button float above other apps.
 2. **Switch on the accessibility service** — lets the button read the field you are in *at the moment
    you tap*, and write the English back.
+3. **Show the button** — the switch that puts the circle on screen, and the only way to take it off
+   again.
+4. **Allow the microphone** — only needed to speak instead of type. Skipping it leaves the tap path
+   exactly as it was.
 
 > **Sideloaders on Android 13+:** Android greys out the accessibility toggle for apps that were not
 > installed from a store. Open **App info → ⋮ (top right) → Allow restricted settings**, then come
@@ -45,14 +52,40 @@ If you already have an older build of this app installed from a different signin
 Studio run, for instance), Android will refuse to install over it — uninstall that first. Doing so
 clears its cached translations, quota counter and settings.
 
+## Speaking instead of typing
+
+Hold the button down and speak Tamil; let go and it stops listening. The words are read back to you
+in the pill beside the button while you talk, and a few moments after you let go the English replaces
+the field you were in — the same field the tap path writes to, with the same Undo.
+
+- **Tamil script, not Tanglish.** A microphone cannot hear romanised Tanglish, so the recogniser is
+  asked for Tamil (`ta-IN`) and its Tamil script is translated into English. That is why speaking
+  needs the phone's Tamil speech support: if the recogniser has none it says so, rather than quietly
+  listening for English words.
+- **Only while you hold it.** Android records nothing until the button is pressed, and the hold ends
+  the moment you let go.
+- **A listening notice is required.** Android does not let a background app keep the microphone open
+  without a foreground service, so a small "Listening in Tamil" notice appears in the notification
+  shade while you hold the button and goes when you let go. On Android 13+, allowing notifications
+  lets you see it; denying them does not stop listening.
+- **A voice translation is capped at 150 characters** — one utterance, not a monologue.
+- **Turning off "Allow AI translation" stops it too.** A hold then does not open the microphone at
+  all: the words could not be translated back, so nothing should be listened to for nothing.
+- **Where the words go.** The Tamil is sent to Google's keyless translate endpoint, with MyMemory's
+  free API behind it if Google refuses. Both need no key and no account, and both keep working with
+  the typed path's quota spent, since they are budgeted separately.
+
+Tamil speech support comes from whichever recognition service the phone ships with (Google's, on most
+phones) and may need the Tamil language downloaded once in your keyboard's voice typing settings.
+
 ## What it reads and what it sends
 
 | | |
 |---|---|
-| Reads | Only the focused text field, only when you tap the button. Nothing is read while you type, and password fields are skipped entirely. |
-| Sends | That field's text goes to `easytamiltyping.com` for translation, once per tap, only if you have allowed AI translation. Results are cached on the device, so repeating a phrase costs nothing. |
-| Free tier | That public endpoint allows roughly **15 requests an hour**. When the budget is spent the button tells you how long until it resets and leaves your text untouched. |
-| Fails safely | Apps that refuse programmatic edits get the translation on the clipboard instead of having their field rewritten. |
+| Reads | Only the focused text field, and only when you tap the button. Nothing is read while you type, and password fields are skipped entirely. Holding the button reads the microphone instead; never both at once. |
+| Sends | On a tap, that field's text goes to `easytamiltyping.com`. On a hold, the Tamil the recogniser heard goes to `translate.googleapis.com`, or to `api.mymemory.translated.net` if Google will not answer. Switching **Allow AI translation** off stops both, and a hold then does not even open the microphone. Results are cached on the device, so repeating a phrase costs nothing. |
+| Free tier | The typed endpoint allows roughly **15 requests an hour**, and says so when the budget is spent. The two spoken endpoints are keyless web services with no published quota of their own: `client=gtx` is undocumented and rate limited per IP, and MyMemory allows 5,000 characters a day anonymously. |
+| Fails safely | Apps that refuse programmatic edits get the translation on the clipboard instead of having their field rewritten, and a translation that never arrived leaves the field untouched. |
 
 ## Building
 
@@ -89,11 +122,14 @@ should redraw it as original artwork.
 |---|---|
 | `overlay/` | The floating button: its window, drag and snap, placement maths, boot restore |
 | `accessibility/` | Reading the focused field, rewriting it, and noticing when the keyboard is up |
-| `translate/` | The button's decision core: what to translate and when to fall back |
-| `engine/`, `net/`, `data/` | Where a sentence gets translated, the endpoint client, the translation cache and quota bookkeeping |
+| `translate/` | The button's decision core: what to translate, what was spoken, and when to fall back |
+| `speech/` | Listening itself: the recogniser, the errors it reports and the microphone permission |
+| `engine/`, `net/`, `data/` | Where a sentence gets translated, the endpoint clients, the translation cache and quota bookkeeping |
 
 ## Notes
 
-Translation comes from easytamiltyping.com's public endpoint, which may change at any time;
-`net/EasyTamilTypingApi.kt` is the single place that would need updating if it does. This is an
-unaffiliated personal project. No licence is granted yet — all rights reserved.
+Typed translation comes from easytamiltyping.com's public endpoint, and spoken translation from
+Google's undocumented `client=gtx` endpoint with MyMemory behind it. All three are free public web
+services that may change or disappear at any time; `net/EasyTamilTypingApi.kt`,
+`net/GoogleTranslateApi.kt` and `net/MyMemoryApi.kt` are the three places that would need updating if
+they do. This is an unaffiliated personal project. No licence is granted yet — all rights reserved.

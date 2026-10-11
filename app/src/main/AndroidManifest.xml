@@ -7,6 +7,23 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Puts the button back on screen after a restart, when the user left it switched on. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Press and hold the button and speak Tamil. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Android only lets a background app keep the microphone open behind a foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- The listening notice, which Android 13 only shows once this is allowed. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Android 11 and newer hide other apps from each other: without this, the recogniser cannot be
+        asked for at all, however the phone is set up.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -30,10 +47,14 @@
             </intent-filter>
         </activity>
 
-        <!-- The floating button itself. -->
+        <!--
+            The floating button, and the microphone while the user is holding it down. The service
+            type is declared here because Android 14 checks it against the promotion in code.
+        -->
         <service
             android:name=".overlay.BubbleService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!--
             Reads the focused text field, and only when the floating button is tapped. The user turns

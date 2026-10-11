@@ -55,6 +55,17 @@ class QuotaTrackerTest {
     }
 
     @Test
+    fun `a spent budget in one account leaves the other one alone`() {
+        val typed = QuotaTracker(store)
+        val spoken = QuotaTracker(store, prefix = "spoken_")
+
+        typed.update(0, now + 3600)
+
+        assertTrue(typed.isExhausted(now))
+        assertEquals("speaking must not be blocked by a spent typed quota", false, spoken.isExhausted(now))
+    }
+
+    @Test
     fun `noteExhausted falls back to a one hour window`() {
         quota.noteExhausted(now, null)
 

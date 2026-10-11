@@ -1,8 +1,12 @@
 package com.example.tanlishkeyboard.overlay
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
@@ -19,17 +23,28 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.tanlishkeyboard.MainActivity
+import com.example.tanlishkeyboard.R
 import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
 import com.example.tanlishkeyboard.data.Settings
+import com.example.tanlishkeyboard.speech.Microphone
+import com.example.tanlishkeyboard.speech.SpeechErrors
+import com.example.tanlishkeyboard.speech.SpeechEvent
+import com.example.tanlishkeyboard.speech.SpeechFailure
+import com.example.tanlishkeyboard.speech.SpeechListener
+import com.example.tanlishkeyboard.speech.SpeechSession
+import com.example.tanlishkeyboard.speech.TamilSpeechListener
 import com.example.tanlishkeyboard.translate.AndroidClipboard
 import com.example.tanlishkeyboard.translate.ButtonOutcome
 import com.example.tanlishkeyboard.translate.ButtonTranslator
 import com.example.tanlishkeyboard.translate.FieldProvider
+import com.example.tanlishkeyboard.translate.SpokenTranslator
 import com.example.tanlishkeyboard.ui.theme.TanlishKeyboardTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +60,8 @@ import kotlin.math.roundToInt
  *
  * It is one small overlay window plus, while a message is being shown, one pill window beside it.
  * Nothing is read from the app underneath until the button is tapped, and the translation goes back
- * through [TanlishAccessibilityService].
+ * through [TanlishAccessibilityService]. Held down instead of tapped, the button listens for Tamil
+ * speech, which [SpokenTranslator] turns into English in that same field.
  */
 class BubbleService : Service() {
 
@@ -55,6 +71,8 @@ class BubbleService : Service() {
     private lateinit var windowManager: WindowManager
     private lateinit var lifecycleOwner: WindowLifecycleOwner
     private lateinit var translator: ButtonTranslator
+    private lateinit var spoken: SpokenTranslator
+    private lateinit var speech: SpeechListener
 
     private val state = mutableStateOf(BubbleState())
 
@@ -69,11 +87,26 @@ class BubbleService : Service() {
     private var hintParams: WindowManager.LayoutParams? = null
     private var hideHintJob: Job? = null
 
+    /** The session the current hold owns, or null when nothing is being listened to. */
+    private var session: SpeechSession? = null
+    private var listening = false
+
+    /** Translating what was just said; a stray tap must not race with it. */
+    private var voiceJob: Job? = null
+
     private val callbacks = object : BubbleCallbacks {
         override fun onTap() = translateFocusedField()
-        override fun onLongPress() = hideButton()
+        override fun onHold() = beginListening()
+        override fun onRelease() = endListening()
         override fun onDrag(dx: Float, dy: Float) = moveBy(dx, dy)
-        override fun onDragEnd() = settle()
+
+        override fun onDragEnd() {
+            settle()
+            // A hold that turned into a drag still ends when the finger comes up, and that release
+            // never reaches the press gesture once the drag has taken the pointer over.
+            endListening()
+        }
+
         override fun onUndo() = undo()
     }
 
@@ -93,6 +126,12 @@ class BubbleService : Service() {
             clipboard = AndroidClipboard(this),
             translator = services.translator,
         )
+        spoken = SpokenTranslator(
+            fields = FieldProvider { TanlishAccessibilityService.focusedFieldOrNull() },
+            clipboard = AndroidClipboard(this),
+            translator = services.spokenTranslator,
+        )
+        speech = TamilSpeechListener(this)
         TanlishAccessibilityService.observeKeyboard { applyKeyboardVisibility() }
         applyKeyboardVisibility()
         settle()
@@ -117,6 +156,7 @@ class BubbleService : Service() {
         isRunning = false
         TanlishAccessibilityService.observeKeyboard(null)
         hideHintJob?.cancel()
+        cancelListening()
         bubble?.let { view -> runCatching { windowManager.removeView(view) } }
         hint?.let { view -> runCatching { windowManager.removeView(view) } }
         bubble = null
@@ -136,8 +176,12 @@ class BubbleService : Service() {
      *
      * When the accessibility service is switched off the keyboard cannot be seen at all, so the button
      * stays: that is how the user finds out step 2 of the setup is missing.
+     *
+     * A hold wins over all of that. Speech recognition can take the keyboard down with it, and a button
+     * that vanished mid-sentence would end the sentence.
      */
     private fun applyKeyboardVisibility() {
+        if (listening) return
         val typing = !TanlishAccessibilityService.isConnected() ||
             TanlishAccessibilityService.isKeyboardVisibleNow()
         if (typing) showBubble() else hideBubble()
@@ -207,7 +251,9 @@ class BubbleService : Service() {
         layoutParams.x = moved.x
         layoutParams.y = moved.y
         bubble?.let { runCatching { windowManager.updateViewLayout(it, layoutParams) } }
-        dismissHint()
+        // The pill belongs beside the button: move it along, unless the user is mid-sentence, in
+        // which case it is still saying something.
+        if (listening) renderHint() else dismissHint()
     }
 
     /** Snaps the button to the nearest edge and remembers where it landed. */
@@ -228,15 +274,13 @@ class BubbleService : Service() {
         services.settings.bubbleY = snapped.y
     }
 
-    private fun hideButton() {
-        services.settings.bubbleEnabled = false
-        Toast.makeText(this, "Translate button hidden — turn it back on in the app", Toast.LENGTH_SHORT).show()
-        stopSelf()
-    }
-
     // ---------------------------------------------------------------- translating
 
     private fun translateFocusedField() {
+        // A tap that lands during a hold, or while the words just spoken are being translated, is
+        // part of that gesture rather than a new one.
+        if (listening || voiceJob?.isActive == true) return
+
         if (!TanlishAccessibilityService.isConnected()) {
             state.value = BubbleState(
                 phase = BubblePhase.Failed,
@@ -250,30 +294,146 @@ class BubbleService : Service() {
         state.value = BubbleState(phase = BubblePhase.Working)
         dismissHint()
 
+        scope.launch { showOutcome(translator.translate(), translator.canUndo) }
+    }
+
+    /**
+     * Whatever just happened to the field, said in the pill: the English that landed, or the reason
+     * nothing did.
+     */
+    private fun showOutcome(outcome: ButtonOutcome, undoOffered: Boolean) {
+        state.value = when (outcome) {
+            is ButtonOutcome.Replaced -> BubbleState(
+                phase = BubblePhase.Done,
+                hint = outcome.message,
+                undoOffered = undoOffered,
+            )
+
+            is ButtonOutcome.Copied -> BubbleState(phase = BubblePhase.Done, hint = outcome.message)
+
+            is ButtonOutcome.Blocked -> BubbleState(phase = BubblePhase.Failed, hint = outcome.message)
+        }
+
+        val pill = if (outcome is ButtonOutcome.Replaced && undoOffered) UNDO_MS else HINT_MS
+        showHint(pill)
+
+        // A hold can outlast the keyboard it began under, and while the pill is up the button has to
+        // stay. Once the pill is gone, the button belongs wherever the keyboard now says it does, so
+        // it does not linger over an app the user has gone back to reading. A newer tap that puts a
+        // fresher pill up owns that decision instead.
         scope.launch {
-            val outcome = translator.translate()
-            state.value = when (outcome) {
-                is ButtonOutcome.Replaced -> BubbleState(
-                    phase = BubblePhase.Done,
-                    hint = outcome.message,
-                    undoOffered = translator.canUndo,
-                )
-
-                is ButtonOutcome.Copied -> BubbleState(phase = BubblePhase.Done, hint = outcome.message)
-
-                is ButtonOutcome.Blocked -> BubbleState(phase = BubblePhase.Failed, hint = outcome.message)
-            }
-            showHint(if (outcome is ButtonOutcome.Replaced && translator.canUndo) UNDO_MS else HINT_MS)
+            delay(pill)
+            if (hint == null) applyKeyboardVisibility()
         }
     }
 
     private fun undo() {
-        val restored = translator.undo()
+        // Whichever route wrote into the field last is the one that can put it back.
+        val restored = if (translator.canUndo) translator.undo() else spoken.undo()
         state.value = BubbleState(
             phase = if (restored) BubblePhase.Done else BubblePhase.Failed,
-            hint = if (restored) "Put your Tanglish back" else "Could not undo that one",
+            hint = if (restored) "Put your text back" else "Could not undo that one",
         )
         showHint(SHORT_MS)
+    }
+
+    // ---------------------------------------------------------------- listening
+
+    /**
+     * Press and hold starts a listening session.
+     *
+     * A microphone foreground service goes up for as long as the button is held: Android does not let
+     * a background app keep the microphone open just because it is drawing an overlay, and listening
+     * has to work while the user is inside somebody else's app. The notification that comes with it is
+     * the price of that, and it says what is going on.
+     */
+    private fun beginListening() {
+        if (listening) return
+
+        if (!Microphone.granted(this)) {
+            state.value = BubbleState(
+                phase = BubblePhase.Failed,
+                hint = SpeechErrors.message(SpeechFailure.Permission),
+            )
+            showHint(HINT_MS)
+            openApp()
+            return
+        }
+
+        // With translation switched off the words could never come back in English, and the mic would
+        // have been opened for nothing: the switch means the same thing for a hold as for a tap.
+        if (!services.settings.allowNetwork) {
+            state.value = BubbleState(
+                phase = BubblePhase.Failed,
+                hint = "AI translation is switched off in the app, so nothing is listening",
+            )
+            showHint(HINT_MS)
+            openApp()
+            return
+        }
+
+        listening = true
+        state.value = BubbleState(phase = BubblePhase.Listening, hint = "Listening… speak Tamil")
+        showHint(null)
+        listenForeground()
+        session = speech.listen(::onSpeechEvent)
+    }
+
+    /** Letting go stops the capture; the words arrive a moment later, through [onSpeechEvent]. */
+    private fun endListening() {
+        if (!listening) return
+        session?.stop()
+    }
+
+    private fun onSpeechEvent(event: SpeechEvent) {
+        when (event) {
+            is SpeechEvent.Partial -> {
+                if (!listening) return
+                // Reading the words back is how the user sees the microphone picking Tamil up.
+                state.value = BubbleState(phase = BubblePhase.Listening, hint = "Hearing “${event.text}”")
+                renderHint()
+            }
+
+            is SpeechEvent.Heard -> heardSpoken(event.text)
+
+            is SpeechEvent.Failed -> {
+                finishListening()
+                state.value = BubbleState(
+                    phase = BubblePhase.Failed,
+                    hint = SpeechErrors.message(event.failure),
+                )
+                showHint(HINT_MS)
+            }
+        }
+    }
+
+    /** What was said becomes English in the field the user was in, with the old text kept for undo. */
+    private fun heardSpoken(tamil: String) {
+        finishListening()
+        dismissHint()
+        state.value = BubbleState(phase = BubblePhase.Working, hint = "Translating what you said")
+        showHint(null)
+
+        voiceJob = scope.launch { showOutcome(spoken.translateSpoken(tamil), spoken.canUndo) }
+    }
+
+    /** The session has answered, and this hold is over. */
+    private fun finishListening() {
+        listening = false
+        session = null
+        leaveForeground()
+    }
+
+    /**
+     * A session the user never gets to finish: the service is going down, so nothing is written and
+     * no result is waited for.
+     */
+    private fun cancelListening() {
+        if (!listening) return
+        listening = false
+        session?.cancel()
+        session = null
+        leaveForeground()
     }
 
     private fun openApp() {
@@ -290,9 +450,25 @@ class BubbleService : Service() {
      * ComposeView cannot be measured until it is attached to a window: doing so throws
      * "Cannot locate windowRecomposer". A TextView has no such problem.
      */
-    private fun showHint(dismissAfterMillis: Long) {
+    private fun showHint(dismissAfterMillis: Long?) {
         if (bubble == null) return
         hideHintJob?.cancel()
+        hideHintJob = null
+        renderHint()
+        if (dismissAfterMillis == null) return
+        hideHintJob = scope.launch {
+            delay(dismissAfterMillis)
+            dismissHint()
+        }
+    }
+
+    /**
+     * Puts the pill up for the current state, re-measured each time because the message changes
+     * length as it goes: while listening it is the words heard so far. Null dismissal leaves it up
+     * until something else replaces it, which is what a hold needs.
+     */
+    private fun renderHint() {
+        if (bubble == null) return
         val view = hint ?: buildHintView().also { hint = it }
         hintMessage?.text = state.value.hint.orEmpty()
         hintUndo?.visibility = if (state.value.undoOffered) View.VISIBLE else View.GONE
@@ -325,11 +501,6 @@ class BubbleService : Service() {
             } else {
                 windowManager.addView(view, layoutParams)
             }
-        }
-
-        hideHintJob = scope.launch {
-            delay(dismissAfterMillis)
-            dismissHint()
         }
     }
 
@@ -381,6 +552,59 @@ class BubbleService : Service() {
             )
         }
     }
+
+    // ---------------------------------------------------------------- the microphone
+
+    /**
+     * Android only lets a background app hold the microphone open behind a foreground service, and a
+     * microphone service has to declare itself twice: in the manifest, and in this call.
+     *
+     * The Android versions that refuse the promotion (a user who has not allowed the microphone from
+     * the app, or an OEM that wants the app on screen) fail the whole listening session rather than
+     * reading anything, and [SpeechErrors] says so in the pill.
+     */
+    private fun listenForeground() {
+        ensureChannel()
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_bubble_mark)
+            .setContentTitle("Listening in Tamil")
+            .setContentText("Let go of the button when you have finished speaking")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setContentIntent(openAppIntent())
+            .build()
+
+        // The microphone type only exists from Android 11 on; below that the promotion carries no
+        // type at all, which is exactly what those versions expect.
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            0
+        }
+        runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type) }
+    }
+
+    private fun leaveForeground() {
+        runCatching { ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE) }
+    }
+
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "Listening", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Shown while the floating button is listening to Tamil speech"
+            },
+        )
+    }
+
+    private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        PendingIntent.FLAG_IMMUTABLE,
+    )
 
     // ---------------------------------------------------------------- plumbing
 
@@ -438,6 +662,8 @@ class BubbleService : Service() {
         const val BUBBLE_SIZE_DP = 56
         private const val MARGIN_DP = 8
         private const val ACTION_APPEARANCE = "com.example.tanlishkeyboard.action.APPEARANCE"
+        private const val CHANNEL_ID = "tanlish-listening"
+        private const val NOTIFICATION_ID = 1
 
         private val HINT_SURFACE = 0xE6141A1F.toInt()
         private val HINT_TEXT = 0xFFF2F5F7.toInt()
