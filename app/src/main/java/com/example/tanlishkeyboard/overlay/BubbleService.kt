@@ -14,6 +14,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
@@ -109,8 +110,10 @@ class BubbleService : Service() {
 
         override fun onDragEnd() {
             settle()
-            // A hold that turned into a drag still ends when the finger comes up, and that release
-            // never reaches the press gesture once the drag has taken the pointer over.
+            // A backstop rather than the mechanism: the press detector reports the release itself,
+            // even when the gesture is cancelled, so this resolves to Nothing in normal use. It is
+            // kept because a listening session open with no finger on the button is the one failure
+            // that must not be possible, and the check is free.
             act(ListeningGestures.release(listening, mode))
         }
 
@@ -119,6 +122,7 @@ class BubbleService : Service() {
 
     /** Carries out whatever a press means right now; [ListeningGestures] decides what that is. */
     private fun act(gesture: BubbleGesture) {
+        Log.d(TAG, "press -> $gesture (listening=$listening, mode=$mode)")
         when (gesture) {
             BubbleGesture.TranslateField -> translateFocusedField()
             BubbleGesture.StartListening -> beginListening()
@@ -319,6 +323,11 @@ class BubbleService : Service() {
      * nothing did.
      */
     private fun showOutcome(outcome: ButtonOutcome, undoOffered: Boolean) {
+        Log.i(TAG, "outcome: " + when (outcome) {
+            is ButtonOutcome.Replaced -> "written into the field"
+            is ButtonOutcome.Copied -> "copied, as no field was focused"
+            is ButtonOutcome.Blocked -> "blocked: ${outcome.message}"
+        })
         state.value = when (outcome) {
             is ButtonOutcome.Replaced -> BubbleState(
                 phase = BubblePhase.Done,
@@ -368,6 +377,7 @@ class BubbleService : Service() {
         if (listening) return
 
         if (!Microphone.granted(this)) {
+            Log.w(TAG, "not listening: the microphone is not allowed to the app")
             state.value = BubbleState(
                 phase = BubblePhase.Failed,
                 hint = SpeechErrors.message(SpeechFailure.Permission),
@@ -380,6 +390,7 @@ class BubbleService : Service() {
         // With translation switched off the words could never come back in English, and the mic would
         // have been opened for nothing: the switch means the same thing for a hold as for a tap.
         if (!services.settings.allowNetwork) {
+            Log.w(TAG, "not listening: AI translation is switched off in the app")
             state.value = BubbleState(
                 phase = BubblePhase.Failed,
                 hint = "AI translation is switched off in the app, so nothing is listening",
@@ -390,6 +401,7 @@ class BubbleService : Service() {
         }
 
         listening = true
+        Log.i(TAG, "listening: mode=$mode")
         state.value = BubbleState(phase = BubblePhase.Listening, hint = ListeningGestures.listeningHint(mode))
         showHint(null)
         listenForeground()
@@ -404,6 +416,7 @@ class BubbleService : Service() {
      */
     private fun endListening() {
         if (!listening) return
+        Log.i(TAG, "stopping the session: the user is done talking")
         session?.stop()
     }
 
@@ -411,6 +424,7 @@ class BubbleService : Service() {
         when (event) {
             is SpeechEvent.Partial -> {
                 if (!listening) return
+                Log.d(TAG, "heard so far: ${event.text.length} chars, “${event.text.take(PREVIEW_CHARS)}”")
                 // Reading the words back is how the user sees the microphone picking Tamil up.
                 state.value = BubbleState(
                     phase = BubblePhase.Listening,
@@ -422,6 +436,7 @@ class BubbleService : Service() {
             is SpeechEvent.Heard -> heardSpoken(event.text)
 
             is SpeechEvent.Failed -> {
+                Log.w(TAG, "listening failed: ${event.failure}")
                 finishListening()
                 state.value = BubbleState(
                     phase = BubblePhase.Failed,
@@ -434,6 +449,7 @@ class BubbleService : Service() {
 
     /** What was said becomes English in the field the user was in, with the old text kept for undo. */
     private fun heardSpoken(tamil: String) {
+        Log.i(TAG, "heard: ${tamil.length} chars, “${tamil.take(PREVIEW_CHARS)}”")
         finishListening()
         dismissHint()
         state.value = BubbleState(phase = BubblePhase.Working, hint = "Translating what you said")
@@ -608,6 +624,7 @@ class BubbleService : Service() {
             0
         }
         runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type) }
+            .onFailure { Log.w(TAG, "the microphone foreground service was refused", it) }
     }
 
     private fun leaveForeground() {
@@ -690,6 +707,17 @@ class BubbleService : Service() {
         private const val ACTION_APPEARANCE = "com.example.tanlishkeyboard.action.APPEARANCE"
         private const val CHANNEL_ID = "tanlish-listening"
         private const val NOTIFICATION_ID = 1
+
+        /**
+         * The tag everything in this app logs under, so one filter shows the whole story:
+         * `adb logcat -s Tanlish`. What a press was read as, whether the microphone was opened,
+         * what the recogniser said and what happened to it. The transcript itself is logged only as
+         * a short preview, and only at debug level.
+         */
+        const val TAG = "Tanlish"
+
+        /** How much of a recognised or spoken phrase is ever written to the log. */
+        private const val PREVIEW_CHARS = 60
 
         private val HINT_SURFACE = 0xE6141A1F.toInt()
         private val HINT_TEXT = 0xFFF2F5F7.toInt()

@@ -8,7 +8,17 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import com.example.tanlishkeyboard.data.ListeningMode
+
+/**
+ * Everything this file has to say goes out under one tag, so the gesture logs in the overlay and
+ * the recogniser logs here can be read as a single story: `adb logcat -s Tanlish`.
+ */
+private const val TAG = "Tanlish"
+
+/** How much of a recognised phrase is ever written to the log. */
+private const val PREVIEW_CHARS = 60
 
 /**
  * Tamil speech, through the recogniser the phone already has.
@@ -32,9 +42,11 @@ class TamilSpeechListener(
     override fun listen(mode: ListeningMode, onEvent: (SpeechEvent) -> Unit): SpeechSession {
         val recogniser = buildRecogniser(context)
         if (recogniser == null) {
+            Log.w(TAG, "no speech recogniser on this phone")
             handler.post { onEvent(SpeechEvent.Failed(SpeechFailure.NoRecogniser)) }
             return NoSession
         }
+        Log.i(TAG, "session starting: language $TAMIL, mode=$mode")
         return Session(recogniser, handler, requestIntent(mode), onEvent).also { it.start() }
     }
 
@@ -75,16 +87,24 @@ class TamilSpeechListener(
         private var partial = ""
 
         /** The recogniser cannot be relied on to answer a stop that arrived before any speech. */
-        private val giveUp = Runnable { fail(SpeechFailure.NothingHeard) }
+        private val giveUp = Runnable {
+            Log.w(TAG, "the recogniser never answered within ${STOP_TIMEOUT_MS}ms; giving up")
+            fail(SpeechFailure.NothingHeard)
+        }
 
         fun start() {
             recogniser.setRecognitionListener(this)
-            val started = runCatching { recogniser.startListening(intent) }.isSuccess
-            if (!started) fail(SpeechFailure.NoRecogniser)
+            runCatching { recogniser.startListening(intent) }
+                .onSuccess { Log.i(TAG, "the recogniser is listening") }
+                .onFailure {
+                    Log.w(TAG, "startListening was refused", it)
+                    fail(SpeechFailure.NoRecogniser)
+                }
         }
 
         override fun stop() {
             if (finished) return
+            Log.i(TAG, "asked the recogniser to stop")
             handler.postDelayed(giveUp, STOP_TIMEOUT_MS)
             runCatching { recogniser.stopListening() }
         }
@@ -104,6 +124,7 @@ class TamilSpeechListener(
             if (finished) return
             val heard = bestOf(partialResults)
             if (heard == null || heard == partial) return
+            Log.d(TAG, "partial: ${heard.length} chars, “${heard.take(PREVIEW_CHARS)}”")
             partial = heard
             onEvent(SpeechEvent.Partial(heard))
         }
@@ -111,6 +132,7 @@ class TamilSpeechListener(
         override fun onResults(results: Bundle?) {
             if (finished) return
             val heard = bestOf(results)
+            Log.i(TAG, "result: ${heard?.length ?: 0} chars, “${heard?.take(PREVIEW_CHARS) ?: ""}”")
             // A result with no words in it is still a failed session, but a partial is good enough.
             if (heard == null) fail(SpeechFailure.NothingHeard) else finish(heard)
         }
@@ -118,6 +140,7 @@ class TamilSpeechListener(
         override fun onError(error: Int) {
             if (finished) return
             val failure = SpeechErrors.failureFor(error)
+            Log.w(TAG, "recogniser error $error (${SpeechErrors.nameOf(error)}) -> $failure")
             if (failure == SpeechFailure.NothingHeard && partial.isNotEmpty()) {
                 finish(partial)
             } else {
@@ -149,8 +172,16 @@ class TamilSpeechListener(
             TamilSpeechListener.bestOf(bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION))
 
         // The callbacks this app has nothing to say about, as the listener interface demands them.
-        override fun onReadyForSpeech(params: Bundle?) = Unit
-        override fun onBeginningOfSpeech() = Unit
+        // The two that say the microphone is actually open are worth a line: without them, a session
+        // that never speaks is indistinguishable from one that never started.
+        override fun onReadyForSpeech(params: Bundle?) {
+            Log.i(TAG, "the microphone is open")
+        }
+
+        override fun onBeginningOfSpeech() {
+            Log.i(TAG, "speech has begun")
+        }
+
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = Unit

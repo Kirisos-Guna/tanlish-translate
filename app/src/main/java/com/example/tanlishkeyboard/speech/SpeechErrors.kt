@@ -39,6 +39,29 @@ object SpeechErrors {
         else -> SpeechFailure.Unknown
     }
 
+    /**
+     * The recogniser's own name for an error code, for the log.
+     *
+     * The numbers on their own are unreadable, and which one came back is often the whole diagnosis:
+     * 12 and 13 mean this phone's recogniser has no Tamil, 9 means the microphone was never allowed.
+     */
+    fun nameOf(errorCode: Int): String = when (errorCode) {
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+        SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
+        SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO"
+        SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
+        SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT"
+        SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
+        SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "ERROR_TOO_MANY_REQUESTS"
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "ERROR_SERVER_DISCONNECTED"
+        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "ERROR_LANGUAGE_NOT_SUPPORTED"
+        SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "ERROR_LANGUAGE_UNAVAILABLE"
+        else -> "ERROR_CODE_$errorCode"
+    }
+
     /** What the button says when a session fails. */
     fun message(failure: SpeechFailure): String = when (failure) {
         SpeechFailure.Permission -> "Allow the microphone in the app, then hold the button again"

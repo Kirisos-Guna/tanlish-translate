@@ -9,8 +9,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -28,8 +26,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.tanlishkeyboard.R
 import com.example.tanlishkeyboard.data.Settings
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Diameter of the floating button, in dp. */
 val BubbleSize = 56.dp
@@ -91,46 +88,74 @@ fun BubbleRoot(
             .clip(CircleShape)
             .background(surface)
             .pointerInput(Unit) {
-                // Deliberately not detectTapGestures: it decides a long press and the release after
-                // it with the same timeout, and a hold here has to last exactly as long as the finger
-                // is down, with the release that ends it reported once.
+                // One detector owns the whole press: tap, hold and drag together.
+                //
+                // Splitting them, as this button used to, sets two detectors racing for the same
+                // pointer, and the drag one consumes movement the moment a finger drifts past the
+                // touch slop — which cancels the press. On a real hand, where a finger always drifts
+                // a little during a half-second press, that silently eats the hold that starts
+                // listening. So the rule is stated here instead, and only here:
+                //
+                //   travelled further than [DRAG_SLOP_FACTOR] touch slops  -> a drag, the button moves
+                //   lasted past the long press threshold first            -> a hold, listening starts
+                //   lifted before either                                  -> a tap
+                //
+                // The drag threshold is deliberately generous: overshooting it costs the user nothing
+                // but a small nudge of the button, while undershooting it costs them the whole gesture.
+                val holdAfterMillis = viewConfiguration.longPressTimeoutMillis
+                val dragAfterPixels = viewConfiguration.touchSlop * DRAG_SLOP_FACTOR
+
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var position = down.position
+                    var travelled = 0f
+                    var lifted = false
 
-                    var heldPastThreshold = false
-                    val release = try {
-                        withTimeout(viewConfiguration.longPressTimeoutMillis) { waitForUpOrCancellation() }
-                    } catch (timeout: TimeoutCancellationException) {
-                        // The finger is still down: this is a hold, not a tap.
-                        heldPastThreshold = true
-                        null
-                    }
-
-                    when {
-                        // Lifted before the threshold: an ordinary tap.
-                        release != null -> callbacks.onTap()
-
-                        heldPastThreshold -> {
-                            callbacks.onHold()
-                            // Whatever ends the press ends the listening, drag or no drag.
-                            waitForUpOrCancellation()
-                            callbacks.onRelease()
+                    // The undecided stretch of the press: whichever of the three happens first wins.
+                    // If this returns without a verdict, the timeout cut it short, which means the
+                    // finger is still down and still on the button: a hold.
+                    withTimeoutOrNull(holdAfterMillis) {
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                                ?: break
+                            if (!change.pressed) {
+                                lifted = true
+                                break
+                            }
+                            travelled += (change.position - position).getDistance()
+                            position = change.position
+                            if (travelled > dragAfterPixels) break
                         }
-
-                        // Neither: the drag gesture took the pointer over, so the button is being moved.
-                        else -> Unit
                     }
+
+                    if (lifted) {
+                        callbacks.onTap()
+                        return@awaitEachGesture
+                    }
+
+                    val holding = travelled <= dragAfterPixels
+                    if (holding) callbacks.onHold()
+
+                    // Whichever way the press was read, the finger is still down: let the button
+                    // follow it, and take the lift as the end of the gesture.
+                    try {
+                        var last = position
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                                ?: break
+                            if (!change.pressed) break
+                            change.consume()
+                            callbacks.onDrag(change.position.x - last.x, change.position.y - last.y)
+                            last = change.position
+                        }
+                    } finally {
+                        // A gesture the framework cancels — the window being re-added, say — must not
+                        // leave a session listening with no finger on the button, so the release is
+                        // reported even then. It is also what ends listening before the button settles.
+                        if (holding) callbacks.onRelease()
+                    }
+                    callbacks.onDragEnd()
                 }
-            }
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDrag = { change, drag ->
-                        change.consume()
-                        callbacks.onDrag(drag.x, drag.y)
-                    },
-                    onDragEnd = { callbacks.onDragEnd() },
-                    onDragCancel = { callbacks.onDragEnd() },
-                )
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -199,3 +224,11 @@ private fun ListeningMark() {
 }
 
 private const val LISTENING_PULSE_MS = 900
+
+/**
+ * How far a press may travel, in touch slops, before it counts as a drag instead of a hold.
+ *
+ * A finger resting on glass for half a second moves a few pixels, and treating that as a drag would
+ * make the hold unreliable on real hands while costing a deliberate drag nothing but a moment of lag.
+ */
+private const val DRAG_SLOP_FACTOR = 1.5f

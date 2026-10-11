@@ -86,6 +86,21 @@ the same field the tap path writes to, with the same Undo.
 Tamil speech support comes from whichever recognition service the phone ships with (Google's, on most
 phones) and may need the Tamil language downloaded once in your keyboard's voice typing settings.
 
+### When a hold does nothing
+
+The press, the microphone and the recogniser all log under one tag, so a failure can be read off a
+phone instead of guessed at — with the phone on USB debugging:
+
+```bash
+adb logcat -s Tanlish
+```
+
+`press -> StartListening` means the hold was read correctly; if it never appears, the press is not
+reaching the service. `the microphone is open` means Android allowed the session. A recogniser error
+is logged as its number *and* its name, which is usually the whole diagnosis: 9 is the microphone
+never allowed, 12 and 13 are a recogniser with no Tamil, and `never answered` means the session
+started and nothing came back. Only a short preview of the recognised words is ever logged.
+
 ## What it reads and what it sends
 
 | | |

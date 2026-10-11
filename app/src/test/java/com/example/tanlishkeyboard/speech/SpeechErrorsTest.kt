@@ -63,6 +63,22 @@ class SpeechErrorsTest {
     }
 
     @Test
+    fun `an error code is named for the log, so a failure can be read off a phone`() {
+        assertEquals(
+            "ERROR_LANGUAGE_UNAVAILABLE",
+            SpeechErrors.nameOf(SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE),
+        )
+        assertEquals(
+            "ERROR_INSUFFICIENT_PERMISSIONS",
+            SpeechErrors.nameOf(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS),
+        )
+        assertEquals("ERROR_NO_MATCH", SpeechErrors.nameOf(SpeechRecognizer.ERROR_NO_MATCH))
+
+        // An OEM recogniser may invent its own codes; they still have to be legible in the log.
+        assertEquals("ERROR_CODE_99", SpeechErrors.nameOf(99))
+    }
+
+    @Test
     fun `the best of the recogniser's candidates is the first one with words in it`() {
         assertEquals("வணக்கம்", TamilSpeechListener.bestOf(listOf("வணக்கம்", "வணக்கம் நண்பா")))
         assertEquals("நன்றி", TamilSpeechListener.bestOf(listOf("  ", "நன்றி")))
