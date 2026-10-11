@@ -31,10 +31,18 @@ android {
         applicationId = "com.example.tanlishkeyboard"
         minSdk = 24
         targetSdk = 37
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The listening rules are unit tested by driving a fake recogniser, and the code under test
+        // logs as it goes: without this, every android.util.Log call would throw "not mocked" in a
+        // JVM test. Framework calls the tests make on purpose still return their defaults, so nothing
+        // here hides a real failure — the assertions are unchanged.
+        testOptions {
+            unitTests.isReturnDefaultValues = true
+        }
     }
 
     signingConfigs {

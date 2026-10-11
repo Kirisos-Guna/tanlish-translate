@@ -58,7 +58,9 @@ clears its cached translations, quota counter and settings.
 Hold the button down and speak Tamil. How it stops is up to you — either letting go of the button,
 or tapping it when you have finished. The words are read back to you in the pill beside the button
 while you talk, and a few moments after the session ends the English replaces the field you were in —
-the same field the tap path writes to, with the same Undo.
+the same field the tap path writes to, with the same Undo. When tap to stop is the chosen way, one
+tap on the button produces one translation: every pause in the middle of the sentence is absorbed,
+and what comes back is the whole thing.
 
 - **Tamil script, not Tanglish.** A microphone cannot hear romanised Tanglish, so the recogniser is
   asked for Tamil (`ta-IN`) and its Tamil script is translated into English. That is why speaking
@@ -67,16 +69,23 @@ the same field the tap path writes to, with the same Undo.
 - **Two ways to end a sentence**, chosen on the app's setup screen. *Hold to talk* keeps the
   microphone open only while your finger is down: let go and the English is written. *Tap to stop*
   starts on the hold, keeps listening while you say the whole thing at your own pace, and writes the
-  English when you tap the button again. Tap to stop asks the recogniser to wait through a pause in
-  the middle of a sentence; a recogniser that ignores that request writes the English early instead,
-  as soon as you stop talking.
+  English when you tap the button again.
+- **A pause does not end a tapped sentence.** A recogniser decides for itself that silence means the
+  speaker has finished, and a request to wait longer is only a request — so tap to stop does not rely
+  on one. Where such a session ends, another starts in its place and its words are kept, and the run
+  goes on until you tap; the pauses cost you nothing, and half a sentence is never written early.
 - **Only while you listen.** Android records nothing until the button is pressed, and the microphone
-  closes the moment the session ends — when your finger comes up, or when you tap the button.
+  closes when the session ends — when your finger comes up, or when you tap the button. In tap to
+  stop, a stretch of silence does close the recognition and immediately open another one, so a
+  sentence can be said slowly; a full minute of saying nothing at all ends the run, and nothing is
+  recorded in between.
 - **A listening notice is required.** Android does not let a background app keep the microphone open
   without a foreground service, so a small "Listening in Tamil" notice appears in the notification
   shade while you hold the button and goes when you let go. On Android 13+, allowing notifications
   lets you see it; denying them does not stop listening.
-- **A voice translation is capped at 150 characters** — one utterance, not a monologue.
+- **A voice translation is capped at 150 characters** — one utterance, not a monologue. Because a
+  tapped sentence can run over several pauses, it can reach that cap: the pill then says to speak up
+  to 150 characters at a time, and the field is left exactly as it was rather than half rewritten.
 - **Turning off "Allow AI translation" stops it too.** A hold then does not open the microphone at
   all: the words could not be translated back, so nothing should be listened to for nothing.
 - **Where the words go.** The Tamil is sent to Google's keyless translate endpoint, with MyMemory's
@@ -99,7 +108,9 @@ adb logcat -s Tanlish
 reaching the service. `the microphone is open` means Android allowed the session. A recogniser error
 is logged as its number *and* its name, which is usually the whole diagnosis: 9 is the microphone
 never allowed, 12 and 13 are a recogniser with no Tamil, and `never answered` means the session
-started and nothing came back. Only a short preview of the recognised words is ever logged.
+started and nothing came back. In tap to stop, `the recogniser finished on its own; listening on for
+the rest of the sentence` is the normal sound of a pause being absorbed, and `handing over N chars
+from M session(s)` is what the tap produced. Only a short preview of the recognised words is logged.
 
 ## What it reads and what it sends
 
