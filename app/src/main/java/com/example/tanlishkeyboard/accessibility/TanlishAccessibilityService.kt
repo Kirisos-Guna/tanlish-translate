@@ -14,14 +14,20 @@ import com.example.tanlishkeyboard.translate.FieldProvider
 /**
  * The only part of the app that can see text inside other apps.
  *
- * It reads nothing on its own: the focused field is looked at only when the floating button asks for
- * it. Its second job is telling the app whether a soft keyboard is on screen, which decides whether
- * that button is visible at all — only an accessibility service can see this without being the
- * keyboard itself.
+ * It reads no text on its own: the focused field's contents are looked at only when the floating button
+ * asks for them. Its second job is telling the app whether the button may be visible at all: whether a
+ * soft keyboard is on screen, which only an accessibility service can see without being the keyboard
+ * itself, and whether the screen in front is one the button has to stay off.
  */
 class TanlishAccessibilityService : AccessibilityService(), FieldProvider {
 
     private val clipboard by lazy { AndroidClipboard(this) }
+
+    /**
+     * The last app seen in front, for the moments Android has no active window to report, such as
+     * halfway through a transition. A bank must not get the button because of one of those.
+     */
+    private var foregroundPackage: String? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -78,8 +84,27 @@ class TanlishAccessibilityService : AccessibilityService(), FieldProvider {
         }
     }.getOrDefault(false)
 
+    /**
+     * Whether the button has to stay off this screen: a banking app, or a password field in any app.
+     *
+     * Banking apps treat another app's window as an attack and stop taking touches, and a password
+     * field is the one place an overlay looks like one even in an app with no such defence. Only the
+     * package name and the field's password flag are looked at, never its text.
+     */
+    fun isProtectedScreen(): Boolean = runCatching {
+        val root = rootInActiveWindow
+        inProtectedApp(root) || root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.isPassword == true
+    }.getOrDefault(false)
+
+    private fun inProtectedApp(root: AccessibilityNodeInfo?): Boolean {
+        root?.packageName?.let { foregroundPackage = it.toString() }
+        return AppServices.get(this).settings.isProtected(foregroundPackage)
+    }
+
     override fun focusedField(): EditableField? {
         val root = rootInActiveWindow ?: return null
+        // A translation still in flight when the user moved to a bank must not land in the bank.
+        if (inProtectedApp(root)) return null
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         val editable = focused?.let { node -> if (node.isEditable) node else firstEditable(node, 0, IntArray(1)) }
             ?: firstEditable(root, 0, IntArray(1))
@@ -124,6 +149,9 @@ class TanlishAccessibilityService : AccessibilityService(), FieldProvider {
         /** Whether a soft keyboard is on screen, or false when this service is switched off. */
         fun isKeyboardVisibleNow(): Boolean =
             runCatching { instance?.isKeyboardVisible() == true }.getOrDefault(false)
+
+        /** Whether the screen in front is one the button stays off, or false when switched off. */
+        fun isProtectedScreenNow(): Boolean = instance?.isProtectedScreen() == true
 
         /** The field in whatever app is in front, or null when this service is switched off. */
         fun focusedFieldOrNull(): EditableField? =

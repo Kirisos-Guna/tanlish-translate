@@ -24,7 +24,8 @@ button and the sentence in that field becomes *Hello friend, how are you?*
 - **Undo** — a six-second chip puts your text back, whichever way the English got there.
 
 The button only appears while the keyboard is up. Drag it anywhere; to get rid of it, turn off
-"Floating button" in the app.
+"Floating button" in the app. It also stays hidden while the accessibility service is off, and out of
+banking apps and password fields, for the reason below.
 
 Typed Tanglish is translated by AI at `easytamiltyping.com`, so a phrase that has never been
 translated before needs an internet connection. There is no offline dictionary: when a request cannot
@@ -52,6 +53,25 @@ Then the one-time steps, all on the app's own setup screen:
 If you already have an older build of this app installed from a different signing key (an Android
 Studio run, for instance), Android will refuse to install over it — uninstall that first. Doing so
 clears its cached translations, quota counter and settings.
+
+## Banking apps
+
+Banking and payment apps defend themselves against screen overlay attacks, and a harmless floating
+button looks the same as a malicious one: touches stop landing, or the app warns about an overlay and
+refuses to continue. So the button stays out of them.
+
+- **It knows the common ones.** Any app with "bank" in its package name, plus Google Pay, PhonePe,
+  Paytm, BHIM, CRED and a few banks whose names do not give them away.
+- **You can add yours.** Android has no list of finance apps to ask, so **Banking and payment apps →
+  Choose apps** in the app adds any bank it missed.
+- **Password fields too, in every app.** That covers a bank's website in a browser.
+- **A session does not follow you in.** Moving to one of these apps closes the microphone and drops
+  what was heard, and a translation still on its way goes to the clipboard, not into the bank's field.
+
+Some banks go further and refuse to open while any accessibility service installed from outside the
+Play Store is switched on, whatever it does. That check is the bank's own, and this app does not try to
+get around it: switch the service off while you bank and on again afterwards. The button goes away with
+it.
 
 ## Speaking instead of typing
 
@@ -116,7 +136,7 @@ from M session(s)` is what the tap produced. Only a short preview of the recogni
 
 | | |
 |---|---|
-| Reads | Only the focused text field, and only when you tap the button. Nothing is read while you type, and password fields are skipped entirely. Holding the button reads the microphone instead; never both at once. |
+| Reads | Only the focused text field, and only when you tap the button. Nothing is read while you type, and password fields are skipped entirely. Holding the button reads the microphone instead; never both at once. To keep the button off banking apps and password fields it also checks which app is in front and whether the focused field is a password field, never what is in it. |
 | Sends | On a tap, that field's text goes to `easytamiltyping.com`. On a hold, the Tamil the recogniser heard goes to `translate.googleapis.com`, or to `api.mymemory.translated.net` if Google will not answer. Switching **Allow AI translation** off stops both, and a hold then does not even open the microphone. Results are cached on the device, so repeating a phrase costs nothing. |
 | Free tier | The typed endpoint allows roughly **15 requests an hour**, and says so when the budget is spent. The two spoken endpoints are keyless web services with no published quota of their own: `client=gtx` is undocumented and rate limited per IP, and MyMemory allows 5,000 characters a day anonymously. |
 | Fails safely | Apps that refuse programmatic edits get the translation on the clipboard instead of having their field rewritten, and a translation that never arrived leaves the field untouched. |

@@ -22,10 +22,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -38,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -51,6 +56,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.tanlishkeyboard.accessibility.TanlishAccessibilityService
 import com.example.tanlishkeyboard.data.AppServices
 import com.example.tanlishkeyboard.data.ListeningMode
+import com.example.tanlishkeyboard.data.ProtectedApps
 import com.example.tanlishkeyboard.data.Settings
 import com.example.tanlishkeyboard.overlay.BubbleService
 import com.example.tanlishkeyboard.speech.Microphone
@@ -65,7 +71,9 @@ import com.example.tanlishkeyboard.translate.EditableField
 import com.example.tanlishkeyboard.translate.FieldProvider
 import com.example.tanlishkeyboard.translate.SpokenTranslator
 import com.example.tanlishkeyboard.ui.theme.TanlishKeyboardTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -117,8 +125,21 @@ class MainActivity : ComponentActivity() {
         fun openAccessibilitySettings(context: Context) {
             runCatching { context.startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS)) }
         }
+
+        /** Everything the user could open from the launcher, for picking apps by name. */
+        fun launchableApps(context: Context): List<InstalledApp> {
+            val manager = context.packageManager
+            val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            return manager.queryIntentActivities(launcher, 0)
+                .filter { it.activityInfo.packageName != context.packageName }
+                .map { InstalledApp(it.activityInfo.packageName, it.loadLabel(manager).toString()) }
+                .distinctBy { it.packageName }
+                .sortedBy { it.label.lowercase() }
+        }
     }
 }
+
+data class InstalledApp(val packageName: String, val label: String)
 
 @Composable
 private fun ButtonScreen(modifier: Modifier = Modifier) {
@@ -135,6 +156,7 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
     var opacity by remember { mutableStateOf(services.settings.bubbleOpacity) }
     var micAllowed by remember { mutableStateOf(Microphone.granted(context)) }
     var listeningMode by remember { mutableStateOf(services.settings.listeningMode) }
+    var choosingApps by remember { mutableStateOf(false) }
 
     var playground by remember { mutableStateOf("") }
     var previous by remember { mutableStateOf<String?>(null) }
@@ -271,9 +293,12 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                 )
 
                 SetupStep(
-                    done = buttonWanted && buttonRunning,
+                    done = buttonWanted && buttonRunning && accessibilityOn,
                     title = "3. Show the button",
-                    body = if (buttonWanted && buttonRunning) {
+                    body = if (buttonWanted && buttonRunning && !accessibilityOn) {
+                        "Switched on, but the circle stays hidden until the accessibility service in " +
+                            "step 2 is on again."
+                    } else if (buttonWanted && buttonRunning) {
                         "Switched on. The circle appears while the keyboard is up — that is, while you are " +
                             "typing — and disappears when you close the keyboard. Drag it anywhere, tap it " +
                             "to translate your text, and press and hold it to speak Tamil into the field. " +
@@ -359,6 +384,28 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
                         "How see-through the circle is while it floats over your apps.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Banking and payment apps", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Banking apps can stop working when another app draws over them, so the circle stays " +
+                        "out of them, and out of password fields in every app. If your bank is not " +
+                        "recognised, add it here.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(onClick = { choosingApps = true }) { Text("Choose apps") }
+                Text(
+                    "Some banks refuse to open at all while an accessibility service from outside the " +
+                        "Play Store is on, whatever that service is doing. Nothing in this app can " +
+                        "change that: switch the service off while you bank, and back on afterwards.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = { MainActivity.openAccessibilitySettings(context) }) {
+                    Text("Open accessibility settings")
                 }
             }
         }
@@ -539,6 +586,45 @@ private fun ButtonScreen(modifier: Modifier = Modifier) {
             }
         }
     }
+
+    if (choosingApps) {
+        ProtectedAppsDialog(settings = services.settings, onDismiss = { choosingApps = false })
+    }
+}
+
+/** Saved on every tick: the floating button reads the list each time the screen changes. */
+@Composable
+private fun ProtectedAppsDialog(settings: Settings, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var chosen by remember { mutableStateOf(settings.protectedApps) }
+    val apps by produceState(emptyList<InstalledApp>()) {
+        value = withContext(Dispatchers.Default) { MainActivity.launchableApps(context) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        title = { Text("Keep the circle out of") },
+        text = {
+            LazyColumn {
+                items(apps, key = { it.packageName }) { app ->
+                    // Built-in apps are shown ticked and locked, so the list reads as the whole truth.
+                    val builtIn = ProtectedApps.isBuiltIn(app.packageName)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = builtIn || app.packageName in chosen,
+                            enabled = !builtIn,
+                            onCheckedChange = { ticked ->
+                                chosen = if (ticked) chosen + app.packageName else chosen - app.packageName
+                                settings.protectedApps = chosen
+                            },
+                        )
+                        Text(app.label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable

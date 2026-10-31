@@ -197,16 +197,24 @@ class BubbleService : Service() {
      * The button is only on screen while a keyboard is up, so it never floats over an app the user is
      * just reading.
      *
-     * When the accessibility service is switched off the keyboard cannot be seen at all, so the button
-     * stays: that is how the user finds out step 2 of the setup is missing.
+     * When the accessibility service is switched off neither the keyboard nor the app in front can be
+     * seen, so the button stays off too: it would otherwise sit over everything, banks included, and
+     * switching the service off is exactly what a bank that objects to it tells people to do. The
+     * setup screen is what says step 2 is missing.
      *
-     * A hold wins over all of that. Speech recognition can take the keyboard down with it, and a button
-     * that vanished mid-sentence would end the sentence.
+     * A hold wins over the keyboard. Speech recognition can take the keyboard down with it, and a
+     * button that vanished mid-sentence would end the sentence. It does not win over a protected
+     * screen: a tapped session can outlast the app it began in, and the microphone has no business
+     * staying open in a bank. What was heard so far is dropped.
      */
     private fun applyKeyboardVisibility() {
+        val typing = TanlishAccessibilityService.isKeyboardVisibleNow()
+        if ((typing || listening) && TanlishAccessibilityService.isProtectedScreenNow()) {
+            cancelListening()
+            hideBubble()
+            return
+        }
         if (listening) return
-        val typing = !TanlishAccessibilityService.isConnected() ||
-            TanlishAccessibilityService.isKeyboardVisibleNow()
         if (typing) showBubble() else hideBubble()
     }
 

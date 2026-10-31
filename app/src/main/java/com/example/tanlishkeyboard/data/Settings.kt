@@ -65,6 +65,19 @@ class Settings(private val store: KeyValueStore) {
         get() = store.getString(KEY_BUBBLE_ENABLED)?.toBooleanStrictOrNull() ?: false
         set(value) = store.putString(KEY_BUBBLE_ENABLED, value.toString())
 
+    /** Apps the user asked the button to stay out of, on top of [ProtectedApps]. */
+    var protectedApps: Set<String>
+        get() = store.getString(KEY_PROTECTED_APPS)
+            ?.split(',')
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            .orEmpty()
+        set(value) = store.putString(KEY_PROTECTED_APPS, value.joinToString(","))
+
+    /** Whether the button has to stay off screen while [packageName] is in front. */
+    fun isProtected(packageName: String?): Boolean =
+        packageName != null && (ProtectedApps.isBuiltIn(packageName) || packageName in protectedApps)
+
     /** Where the user last left the button, in pixels, or null before it has been dragged. */
     var bubbleX: Int?
         get() = store.getString(KEY_BUBBLE_X)?.toIntOrNull()
@@ -96,6 +109,7 @@ class Settings(private val store: KeyValueStore) {
         private const val KEY_LISTENING_MODE = "listening_mode"
         private const val KEY_BUBBLE_OPACITY = "bubble_opacity"
         private const val KEY_BUBBLE_ENABLED = "bubble_enabled"
+        private const val KEY_PROTECTED_APPS = "protected_apps"
         private const val KEY_BUBBLE_X = "bubble_x"
         private const val KEY_BUBBLE_Y = "bubble_y"
         private const val KEY_ACCESSIBILITY_SEEN = "accessibility_seen_at"
